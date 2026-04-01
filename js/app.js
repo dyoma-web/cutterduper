@@ -133,8 +133,54 @@ CD.App = (function() {
     CD.Comments.init('cd-comments-container');
     CD.Editor.init('cd-editor-container');
 
+    // Preview mode button
+    initPreviewButton();
+
     // Keyboard shortcuts
     bindKeyboardShortcuts();
+  }
+
+  /**
+   * Boton de vista previa: alterna entre modo editor y modo visualizador.
+   */
+  function initPreviewButton() {
+    var btn = document.getElementById('cd-preview-btn');
+    if (!btn) return;
+
+    // Mostrar boton si hay sesion activa
+    function updateBtn() {
+      var isEditing = CD.State.get('isEditing');
+      var hasToken = !!CD.State.get('editToken');
+      if (isEditing) {
+        btn.style.display = 'flex';
+        btn.innerHTML = '<span class="cd-preview-icon">&#128065;</span> Vista previa';
+        btn.title = 'Ver como lo veria un visualizador';
+      } else if (hasToken) {
+        btn.style.display = 'flex';
+        btn.innerHTML = '<span class="cd-preview-icon">&#9998;</span> Volver a editar';
+        btn.title = 'Volver al modo editor';
+      } else {
+        btn.style.display = 'none';
+      }
+    }
+
+    btn.addEventListener('click', function() {
+      var isEditing = CD.State.get('isEditing');
+      if (isEditing) {
+        // Entrar en modo vista previa (mantener token pero ocultar editor)
+        CD.State.set({ isEditing: false });
+      } else {
+        // Volver a editar (ya tenemos el token guardado)
+        var token = CD.State.get('editToken');
+        if (token) {
+          CD.State.set({ isEditing: true });
+        }
+      }
+    });
+
+    CD.State.on('isEditing', updateBtn);
+    CD.State.on('editToken', updateBtn);
+    updateBtn();
   }
 
   /**

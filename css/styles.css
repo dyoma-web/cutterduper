@@ -146,12 +146,32 @@ body {
   color: var(--cd-text-dim);
 }
 
-.cd-header__disclaimer {
+.cd-header__actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cd-header__disclaimer {
   font-size: 0.65rem;
   color: var(--cd-text-muted);
   text-align: right;
   max-width: 280px;
+}
+
+.cd-btn--preview {
+  font-size: 0.7rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+
+.cd-btn--preview .cd-preview-icon {
+  font-size: 0.85rem;
 }
 
 /* ============================================================
@@ -206,6 +226,7 @@ body {
   position: relative;
   flex: 1;
   min-width: 0;
+  max-width: 720px;
   background: #000;
   border-radius: var(--cd-radius-lg);
   overflow: hidden;
