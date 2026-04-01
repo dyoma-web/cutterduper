@@ -21,7 +21,7 @@ CD.State = (function() {
     activeCommentId: null,  // ID del comentario activo (resaltado)
     isLoading: false,       // Cargando datos
     error: null,            // Ultimo error
-    playbackMode: 'full',   // 'full' = video completo, 'segments' = solo bloques
+    playbackMode: 'segments',   // 'full' = video completo, 'segments' = solo bloques
     videoDurationMs: 0,     // Duracion total del video fuente
     categories: [],         // Categorias del proyecto
     showCommentMarkers: true, // Mostrar marcadores de comentarios en timeline

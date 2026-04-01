@@ -117,12 +117,45 @@ CD.App = (function() {
     // Disclaimer
     var disclaimerEl = document.getElementById('cd-disclaimer');
     if (disclaimerEl) {
-      disclaimerEl.textContent = 'Previsualización de edición — no es un render final. El video fuente no se modifica.';
+      disclaimerEl.textContent = 'Previsualizacion de edicion — no es un render final.';
+    }
+
+    // Ocultar logo-link para visualizadores (solo editores pueden ir al inicio)
+    var homeLink = document.querySelector('.cd-header__home');
+    if (homeLink) {
+      if (!CD.State.get('editToken')) {
+        // Visualizador: deshabilitar link
+        homeLink.removeAttribute('href');
+        homeLink.style.cursor = 'default';
+        homeLink.addEventListener('click', function(e) {
+          if (!CD.State.get('editToken')) e.preventDefault();
+        });
+      }
+      // Actualizar si cambia la sesion
+      CD.State.on('editToken', function(token) {
+        if (token) {
+          homeLink.setAttribute('href', '?');
+          homeLink.style.cursor = 'pointer';
+        } else {
+          homeLink.removeAttribute('href');
+          homeLink.style.cursor = 'default';
+        }
+      });
     }
 
     // Ocultar loading, mostrar app
     document.getElementById('cd-loading').style.display = 'none';
     document.getElementById('cd-app').style.display = 'grid';
+
+    // Mostrar loading en el player
+    var playerWrapper = document.querySelector('.cd-player-wrapper');
+    if (playerWrapper) {
+      var playerLoading = document.createElement('div');
+      playerLoading.className = 'cd-player-loading';
+      playerLoading.id = 'cd-player-loading';
+      playerLoading.innerHTML = '<div class="cd-loading-spinner"></div><span>Cargando video...</span>';
+      playerWrapper.appendChild(playerLoading);
+    }
 
     // Inicializar YouTube Player
     initYouTubePlayer(project.youtube_video_id);
@@ -202,6 +235,13 @@ CD.App = (function() {
     CD.Player.init('cd-player', videoId)
       .then(function() {
         console.log('YouTube Player listo');
+
+        // Ocultar loading del player
+        var pl = document.getElementById('cd-player-loading');
+        if (pl) {
+          pl.style.opacity = '0';
+          setTimeout(function() { pl.remove(); }, 300);
+        }
 
         // Si hay segmentos, posicionar en el primero
         var segments = CD.State.get('segments');
