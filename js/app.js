@@ -129,6 +129,7 @@ CD.App = (function() {
 
     // Inicializar componentes
     CD.TimelineUI.init('cd-timeline-container');
+    CD.SegmentInfo.init('cd-seginfo-container');
     CD.Comments.init('cd-comments-container');
     CD.Editor.init('cd-editor-container');
 

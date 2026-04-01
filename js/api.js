@@ -60,11 +60,6 @@ CD.API = (function() {
     .then(function(resp) { return resp.json(); })
     .then(function(data) {
       if (!data.ok) {
-        // Si es error de auth, limpiar sesión
-        if (data.code === 401) {
-          CD.State.set({ editToken: null, isEditing: false });
-          CD.State.saveSession(null);
-        }
         throw new Error(data.error || 'Error desconocido');
       }
       return data;
