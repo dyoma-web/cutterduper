@@ -43,13 +43,13 @@ CD.TimelineUI = (function() {
   }
 
   function getSegmentColor(seg, index) {
-    // Priority: segment custom color > category color > default rotation
-    if (seg.color && String(seg.color).trim()) return String(seg.color);
+    // Priority: category color > segment custom color > default rotation
     if (seg.category_id && String(seg.category_id).trim()) {
       var categories = CD.State.get('categories') || [];
       var cat = categories.find(function(c) { return String(c.id) === String(seg.category_id); });
       if (cat && cat.color) return cat.color;
     }
+    if (seg.color && String(seg.color).trim()) return String(seg.color);
     return DEFAULT_COLORS[index % DEFAULT_COLORS.length];
   }
 

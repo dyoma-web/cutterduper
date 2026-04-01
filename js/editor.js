@@ -247,12 +247,12 @@ CD.Editor = (function() {
 
   function getSegmentColorForList(seg, index) {
     var DEFAULT = ['#3b82f6','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444','#ec4899','#6366f1'];
-    if (seg.color && String(seg.color).trim()) return String(seg.color);
     if (seg.category_id && String(seg.category_id).trim()) {
       var categories = CD.State.get('categories') || [];
       var cat = categories.find(function(c) { return String(c.id) === String(seg.category_id); });
       if (cat && cat.color) return cat.color;
     }
+    if (seg.color && String(seg.color).trim()) return String(seg.color);
     return DEFAULT[index % DEFAULT.length];
   }
 
@@ -381,8 +381,10 @@ CD.Editor = (function() {
     var title = (document.getElementById('cd-seg-title').value || '').trim();
     var startMs = CD.Utils.parseTime(document.getElementById('cd-seg-start').value);
     var endMs = CD.Utils.parseTime(document.getElementById('cd-seg-end').value);
-    var categoryId = document.getElementById('cd-seg-category').value;
-    var color = document.getElementById('cd-seg-color').value;
+    var categoryId = document.getElementById('cd-seg-category').value || '';
+    var colorInput = document.getElementById('cd-seg-color').value;
+    // Si hay categoría, no enviar color individual (usará el de la categoría)
+    var color = categoryId ? '' : colorInput;
     var errorEl = document.getElementById('cd-seg-error');
 
     if (isNaN(startMs)) { showError(errorEl, 'Tiempo de inicio invalido.'); return; }
