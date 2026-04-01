@@ -20,6 +20,20 @@ function getSheet(name) {
     sheet = ss.insertSheet(name);
     const headers = SHEET_HEADERS[name];
     if (headers) sheet.appendRow(headers);
+  } else {
+    // Ensure all expected columns exist (auto-migrate)
+    const expected = SHEET_HEADERS[name];
+    if (expected) {
+      const lastCol = sheet.getLastColumn();
+      const currentHeaders = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+      for (let i = 0; i < expected.length; i++) {
+        if (currentHeaders.indexOf(expected[i]) === -1) {
+          // Add missing column at the end
+          const newCol = sheet.getLastColumn() + 1;
+          sheet.getRange(1, newCol).setValue(expected[i]);
+        }
+      }
+    }
   }
   return sheet;
 }
@@ -85,6 +99,20 @@ function updateCell(sheet, rowIdx, colName, value) {
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const colIdx = headers.indexOf(colName);
   if (colIdx >= 0) sheet.getRange(rowIdx, colIdx + 1).setValue(value);
+}
+
+/**
+ * Appends a row using a key-value object, mapping to column headers.
+ * This works regardless of column order.
+ */
+function appendRowByHeaders(sheet, dataObj) {
+  const lastCol = sheet.getLastColumn();
+  const headers = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+  const row = [];
+  for (let i = 0; i < headers.length; i++) {
+    row.push(dataObj.hasOwnProperty(headers[i]) ? dataObj[headers[i]] : '');
+  }
+  sheet.appendRow(row);
 }
 
 // ============================================================
@@ -216,7 +244,7 @@ function handleCreateProject(body) {
   const sheet = getSheet('projects');
   const id = generateId();
   const timestamp = now();
-  sheet.appendRow([id, title, (body.description || '').substring(0, 500), youtubeVideoId, hashPin(pin), 'draft', timestamp, timestamp]);
+  appendRowByHeaders(sheet, { id: id, title: title, description: (body.description || '').substring(0, 500), youtube_video_id: youtubeVideoId, edit_pin_hash: hashPin(pin), status: 'draft', created_at: timestamp, updated_at: timestamp });
   return jsonResponse({ ok: true, project: { id: id, title: title, youtube_video_id: youtubeVideoId, status: 'draft' } });
 }
 
@@ -258,7 +286,7 @@ function handleUnlock(body) {
   for (let i = sessions.length - 1; i >= 0; i--) {
     if (String(sessions[i].project_id) === String(projectId)) deleteRow(sessSheet, 'token', sessions[i].token);
   }
-  sessSheet.appendRow([projectId, token, expiresAt]);
+  appendRowByHeaders(sessSheet, { project_id: projectId, token: token, expires_at: expiresAt });
   return jsonResponse({ ok: true, token: token, expiresAt: expiresAt });
 }
 
@@ -300,7 +328,7 @@ function handleSaveCategory(body) {
     return jsonResponse({ ok: true, id: body.id });
   } else {
     const id = generateId();
-    sheet.appendRow([id, projectId, name, color, now()]);
+    appendRowByHeaders(sheet, { id: id, project_id: projectId, name: name, color: color, created_at: now() });
     return jsonResponse({ ok: true, id: id });
   }
 }
@@ -371,7 +399,7 @@ function handleSaveSegment(body) {
     }
     const id = generateId();
     const orderIndex = projectSegments.length;
-    sheet.appendRow([id, projectId, orderIndex, title, sourceStartMs, sourceEndMs, 0, 0, categoryId, color, timestamp, timestamp]);
+    appendRowByHeaders(sheet, { id: id, project_id: projectId, order_index: orderIndex, title: title, source_start_ms: sourceStartMs, source_end_ms: sourceEndMs, edited_start_ms: 0, edited_end_ms: 0, category_id: categoryId, color: color, created_at: timestamp, updated_at: timestamp });
     return jsonResponse({ ok: true, id: id });
   }
 }
@@ -439,7 +467,7 @@ function handleAddComment(body) {
   const sheet = getSheet('comments');
   const id = generateId();
   const timestamp = now();
-  sheet.appendRow([id, projectId, editedTimeMs, sourceTimeMs, authorLabel, text, timestamp]);
+  appendRowByHeaders(sheet, { id: id, project_id: projectId, edited_time_ms: editedTimeMs, source_time_ms: sourceTimeMs, author_label: authorLabel, text: text, created_at: timestamp });
   return jsonResponse({ ok: true, comment: { id: id, project_id: projectId, edited_time_ms: editedTimeMs, source_time_ms: sourceTimeMs, author_label: authorLabel, text: text, created_at: timestamp } });
 }
 
