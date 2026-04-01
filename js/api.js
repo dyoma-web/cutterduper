@@ -111,7 +111,7 @@ CD.API = (function() {
   }
 
   function deleteSegment(segmentId) {
-    return apiPost({ action: 'deleteSegment', segmentId: segmentId });
+    return apiPost({ action: 'deleteSegment', segmentId: segmentId, projectId: CD.State.get('project').id });
   }
 
   function reorderSegments(projectId, orderedIds) {
@@ -138,7 +138,7 @@ CD.API = (function() {
   }
 
   function deleteComment(commentId) {
-    return apiPost({ action: 'deleteComment', commentId: commentId });
+    return apiPost({ action: 'deleteComment', commentId: commentId, projectId: CD.State.get('project').id });
   }
 
   function unlock(projectId, pin) {
@@ -168,7 +168,7 @@ CD.API = (function() {
   }
 
   function deleteCategory(categoryId) {
-    return apiPost({ action: 'deleteCategory', categoryId: categoryId });
+    return apiPost({ action: 'deleteCategory', categoryId: categoryId, projectId: CD.State.get('project').id });
   }
 
   function ping() {
