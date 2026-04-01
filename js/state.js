@@ -20,7 +20,9 @@ CD.State = (function() {
     currentSegmentIndex: -1,// Índice del segmento actual
     activeCommentId: null,  // ID del comentario activo (resaltado)
     isLoading: false,       // Cargando datos
-    error: null             // Último error
+    error: null,            // Último error
+    playbackMode: 'full',   // 'full' = video completo, 'segments' = solo bloques
+    videoDurationMs: 0      // Duración total del video fuente
   };
 
   // Listeners por clave de estado

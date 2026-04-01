@@ -91,17 +91,29 @@ CD.Editor = (function() {
     // Formulario de segmento
     formEl = document.createElement('div');
     formEl.className = 'cd-editor__form';
+    // Auto-fill inicio con tiempo actual del video
+    var currentTime = CD.Utils.formatTimePrecise(CD.State.get('currentSourceMs'));
+
     formEl.innerHTML =
       '<h4 id="cd-seg-form-title">Nuevo segmento</h4>' +
       '<div class="cd-form-grid">' +
-        '<label>Título (opcional)<input type="text" id="cd-seg-title" class="cd-input" placeholder="Ej: Introducción" maxlength="200"></label>' +
-        '<label>Inicio (fuente)<input type="text" id="cd-seg-start" class="cd-input" placeholder="MM:SS o segundos"></label>' +
-        '<label>Fin (fuente)<input type="text" id="cd-seg-end" class="cd-input" placeholder="MM:SS o segundos"></label>' +
+        '<label>Titulo (opcional)<input type="text" id="cd-seg-title" class="cd-input" placeholder="Ej: Introduccion" maxlength="200"></label>' +
+        '<label>Inicio (fuente)' +
+          '<div style="display:flex;gap:4px;">' +
+            '<input type="text" id="cd-seg-start" class="cd-input" placeholder="MM:SS" value="' + currentTime + '">' +
+            '<button id="cd-seg-use-start" class="cd-btn cd-btn--xs cd-btn--secondary" title="Capturar tiempo actual">Ahora</button>' +
+          '</div>' +
+        '</label>' +
+        '<label>Fin (fuente)' +
+          '<div style="display:flex;gap:4px;">' +
+            '<input type="text" id="cd-seg-end" class="cd-input" placeholder="MM:SS">' +
+            '<button id="cd-seg-use-end" class="cd-btn cd-btn--xs cd-btn--secondary" title="Capturar tiempo actual">Ahora</button>' +
+          '</div>' +
+        '</label>' +
       '</div>' +
       '<div class="cd-editor__form-actions">' +
         '<button id="cd-seg-save" class="cd-btn cd-btn--primary">Agregar segmento</button>' +
         '<button id="cd-seg-cancel" class="cd-btn cd-btn--secondary" style="display:none">Cancelar</button>' +
-        '<button id="cd-seg-use-current" class="cd-btn cd-btn--sm cd-btn--secondary" title="Usar el tiempo actual del video como inicio">Usar tiempo actual como inicio</button>' +
       '</div>' +
       '<div id="cd-seg-error" class="cd-error" style="display:none"></div>';
     container.appendChild(formEl);
@@ -234,15 +246,20 @@ CD.Editor = (function() {
       cancelBtn.addEventListener('click', resetForm);
     }
 
-    // Usar tiempo actual
-    var useCurrentBtn = document.getElementById('cd-seg-use-current');
-    if (useCurrentBtn) {
-      useCurrentBtn.addEventListener('click', function() {
+    // Botones "Ahora" para capturar tiempo actual
+    var useStartBtn = document.getElementById('cd-seg-use-start');
+    if (useStartBtn) {
+      useStartBtn.addEventListener('click', function() {
         var sourceMs = CD.State.get('currentSourceMs');
-        var startInput = document.getElementById('cd-seg-start');
-        if (startInput) {
-          startInput.value = CD.Utils.formatTimePrecise(sourceMs);
-        }
+        document.getElementById('cd-seg-start').value = CD.Utils.formatTimePrecise(sourceMs);
+      });
+    }
+
+    var useEndBtn = document.getElementById('cd-seg-use-end');
+    if (useEndBtn) {
+      useEndBtn.addEventListener('click', function() {
+        var sourceMs = CD.State.get('currentSourceMs');
+        document.getElementById('cd-seg-end').value = CD.Utils.formatTimePrecise(sourceMs);
       });
     }
 

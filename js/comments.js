@@ -26,7 +26,7 @@ CD.Comments = (function() {
     bindEvents();
 
     CD.State.on('comments', renderComments);
-    CD.State.on('currentEditedMs', updateActiveComment);
+    CD.State.on('currentSourceMs', updateActiveComment);
   }
 
   function render() {
@@ -80,11 +80,12 @@ CD.Comments = (function() {
       var item = document.createElement('div');
       item.className = 'cd-comment';
       item.dataset.id = c.id;
+      item.dataset.sourceTimeMs = c.source_time_ms;
       item.dataset.editedTimeMs = c.edited_time_ms;
 
       var timeTag = document.createElement('span');
       timeTag.className = 'cd-comment__time';
-      timeTag.textContent = CD.Utils.formatTime(Number(c.edited_time_ms));
+      timeTag.textContent = CD.Utils.formatTime(Number(c.source_time_ms));
 
       var author = document.createElement('span');
       author.className = 'cd-comment__author';
@@ -121,15 +122,16 @@ CD.Comments = (function() {
   function updateActiveComment() {
     if (!listEl) return;
 
-    var currentMs = CD.State.get('currentEditedMs');
+    var currentSourceMs = CD.State.get('currentSourceMs');
     var comments = CD.State.get('comments');
 
     if (!comments || comments.length === 0) return;
 
-    // Encontrar el comentario más cercano al tiempo actual (sin pasar)
+    // Encontrar el comentario más cercano al source time actual (sin pasar)
+    // Ordenamos por source_time_ms para la comparación
     var activeId = null;
     for (var i = comments.length - 1; i >= 0; i--) {
-      if (Number(comments[i].edited_time_ms) <= currentMs) {
+      if (Number(comments[i].source_time_ms) <= currentSourceMs) {
         activeId = comments[i].id;
         break;
       }
@@ -139,13 +141,10 @@ CD.Comments = (function() {
     if (activeId !== CD.State.get('activeCommentId')) {
       CD.State.set({ activeCommentId: activeId });
 
-      // Actualizar clases CSS
       var items = listEl.querySelectorAll('.cd-comment');
       for (var j = 0; j < items.length; j++) {
         if (items[j].dataset.id === activeId) {
           items[j].classList.add('cd-comment--active');
-
-          // Auto-scroll moderado
           if (autoScrollEnabled) {
             items[j].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           }
@@ -158,7 +157,7 @@ CD.Comments = (function() {
     // Actualizar el tiempo mostrado en el formulario
     var timeHint = document.getElementById('cd-comment-time');
     if (timeHint) {
-      timeHint.textContent = CD.Utils.formatTime(currentMs);
+      timeHint.textContent = CD.Utils.formatTime(currentSourceMs);
     }
   }
 
@@ -177,11 +176,11 @@ CD.Comments = (function() {
         return;
       }
 
-      // Click en comentario → seek
+      // Click en comentario → seek al source time
       var commentEl = e.target.closest('.cd-comment');
-      if (commentEl && commentEl.dataset.editedTimeMs) {
-        var editedMs = parseInt(commentEl.dataset.editedTimeMs, 10);
-        CD.Player.seekToEditedTime(editedMs);
+      if (commentEl && commentEl.dataset.sourceTimeMs) {
+        var sourceMs = parseInt(commentEl.dataset.sourceTimeMs, 10);
+        CD.Player.seekToSourceDirect(sourceMs);
       }
     });
 

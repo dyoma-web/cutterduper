@@ -1,29 +1,26 @@
 /**
  * CutterDuper — Timeline UI
  * ==========================
- * Barra visual de la timeline editada.
- * Muestra segmentos como bloques, playhead, click para seek.
+ * Barra visual que muestra la duración TOTAL del video fuente.
+ * Los segmentos se dibujan como bloques coloreados ENCIMA de la barra.
+ * Toggle para alternar entre reproducir video completo o solo segmentos.
  */
 var CD = window.CD || {};
 
 CD.TimelineUI = (function() {
 
   var container = null;
-  var segmentsBar = null;
+  var barEl = null;
   var playhead = null;
   var timeDisplay = null;
   var durationDisplay = null;
   var isDragging = false;
 
-  // Colores para segmentos (rotan)
   var SEGMENT_COLORS = [
     '#3b82f6', '#8b5cf6', '#06b6d4', '#10b981',
     '#f59e0b', '#ef4444', '#ec4899', '#6366f1'
   ];
 
-  /**
-   * Inicializa el timeline UI.
-   */
   function init(containerId) {
     container = document.getElementById(containerId);
     if (!container) return;
@@ -31,16 +28,17 @@ CD.TimelineUI = (function() {
     render();
     bindEvents();
 
-    // Suscribirse a cambios de estado
     CD.State.on('segments', renderSegments);
-    CD.State.on('currentEditedMs', updatePlayhead);
+    CD.State.on('currentSourceMs', updatePlayhead);
+    CD.State.on('isPlaying', updatePlayButton);
+    CD.State.on('videoDurationMs', renderSegments);
   }
 
   function render() {
     container.innerHTML = '';
     container.className = 'cd-timeline';
 
-    // Controles de reproducción
+    // Controles
     var controls = document.createElement('div');
     controls.className = 'cd-timeline__controls';
 
@@ -70,95 +68,128 @@ CD.TimelineUI = (function() {
     controls.appendChild(separator);
     controls.appendChild(durationDisplay);
 
-    // Barra de segmentos
+    // Toggle de modo
+    var modeDiv = document.createElement('div');
+    modeDiv.className = 'cd-timeline__mode';
+
+    var modeLabel = document.createElement('label');
+    modeLabel.className = 'cd-timeline__mode-label';
+    modeLabel.textContent = 'Solo bloques';
+    modeLabel.htmlFor = 'cd-mode-toggle';
+
+    var modeToggle = document.createElement('button');
+    modeToggle.className = 'cd-timeline__mode-toggle';
+    modeToggle.id = 'cd-mode-toggle';
+    modeToggle.title = 'Alternar: reproducir video completo o solo bloques seleccionados';
+    if (CD.State.get('playbackMode') === 'segments') {
+      modeToggle.classList.add('active');
+    }
+
+    modeToggle.addEventListener('click', function() {
+      var current = CD.State.get('playbackMode');
+      var next = current === 'full' ? 'segments' : 'full';
+      CD.State.set({ playbackMode: next });
+      modeToggle.classList.toggle('active', next === 'segments');
+    });
+
+    modeDiv.appendChild(modeLabel);
+    modeDiv.appendChild(modeToggle);
+    controls.appendChild(modeDiv);
+
+    // Barra
     var barWrapper = document.createElement('div');
     barWrapper.className = 'cd-timeline__bar-wrapper';
 
-    segmentsBar = document.createElement('div');
-    segmentsBar.className = 'cd-timeline__bar';
+    barEl = document.createElement('div');
+    barEl.className = 'cd-timeline__bar';
 
     playhead = document.createElement('div');
     playhead.className = 'cd-timeline__playhead';
 
-    barWrapper.appendChild(segmentsBar);
+    barWrapper.appendChild(barEl);
     barWrapper.appendChild(playhead);
 
     container.appendChild(controls);
     container.appendChild(barWrapper);
 
-    // Render inicial
     renderSegments();
   }
 
   /**
-   * Renderiza los bloques de segmentos en la barra.
+   * Renderiza segmentos como bloques posicionados sobre la barra de duración total.
    */
   function renderSegments() {
-    if (!segmentsBar) return;
-    segmentsBar.innerHTML = '';
+    if (!barEl) return;
+    barEl.innerHTML = '';
 
-    var segments = CD.State.get('segments');
-    var totalDuration = CD.Utils.getTotalEditedDuration(segments);
-
-    if (totalDuration === 0 || segments.length === 0) {
-      segmentsBar.innerHTML = '<div class="cd-timeline__empty">Sin segmentos definidos</div>';
-      if (durationDisplay) durationDisplay.textContent = '00:00';
+    var totalMs = CD.State.get('videoDurationMs') || CD.Player.getVideoDuration();
+    if (totalMs <= 0) {
+      // Intentar obtener la duración después de un momento
+      setTimeout(function() {
+        var dur = CD.Player.getVideoDuration();
+        if (dur > 0) {
+          CD.State.set({ videoDurationMs: dur });
+        }
+      }, 1000);
+      if (durationDisplay) durationDisplay.textContent = '--:--';
       return;
     }
 
-    if (durationDisplay) durationDisplay.textContent = CD.Utils.formatTime(totalDuration);
+    if (durationDisplay) durationDisplay.textContent = CD.Utils.formatTime(totalMs);
+
+    var segments = CD.State.get('segments');
+    if (!segments || segments.length === 0) return;
 
     for (var i = 0; i < segments.length; i++) {
       var seg = segments[i];
-      var duration = Number(seg.edited_end_ms) - Number(seg.edited_start_ms);
-      var widthPercent = (duration / totalDuration) * 100;
+      var startMs = Number(seg.source_start_ms);
+      var endMs = Number(seg.source_end_ms);
+      var leftPercent = (startMs / totalMs) * 100;
+      var widthPercent = ((endMs - startMs) / totalMs) * 100;
 
       var block = document.createElement('div');
       block.className = 'cd-timeline__segment';
+      block.style.left = leftPercent + '%';
       block.style.width = widthPercent + '%';
       block.style.backgroundColor = SEGMENT_COLORS[i % SEGMENT_COLORS.length];
       block.dataset.index = i;
       block.title = (seg.title || 'Segmento ' + (i + 1)) +
-        '\n' + CD.Utils.formatTime(Number(seg.source_start_ms)) +
-        ' → ' + CD.Utils.formatTime(Number(seg.source_end_ms)) +
-        ' (fuente)';
+        '\n' + CD.Utils.formatTime(startMs) + ' → ' + CD.Utils.formatTime(endMs);
 
-      // Label del segmento (solo si es suficientemente ancho)
-      if (widthPercent > 8) {
+      if (widthPercent > 5) {
         var label = document.createElement('span');
         label.className = 'cd-timeline__segment-label';
         label.textContent = seg.title || 'S' + (i + 1);
         block.appendChild(label);
       }
 
-      segmentsBar.appendChild(block);
+      barEl.appendChild(block);
     }
   }
 
   /**
-   * Actualiza la posición del playhead.
+   * Actualiza playhead basado en source time (posición real del video).
    */
   function updatePlayhead() {
-    if (!playhead || !segmentsBar) return;
+    if (!playhead) return;
 
-    var segments = CD.State.get('segments');
-    var totalDuration = CD.Utils.getTotalEditedDuration(segments);
-    var currentMs = CD.State.get('currentEditedMs');
+    var totalMs = CD.State.get('videoDurationMs') || CD.Player.getVideoDuration();
+    var currentMs = CD.State.get('currentSourceMs');
 
-    if (totalDuration === 0) {
+    if (totalMs <= 0) {
       playhead.style.left = '0%';
       return;
     }
 
-    var percent = Math.min(100, Math.max(0, (currentMs / totalDuration) * 100));
+    var percent = Math.min(100, Math.max(0, (currentMs / totalMs) * 100));
     playhead.style.left = percent + '%';
 
-    // Actualizar display de tiempo
     if (timeDisplay) {
       timeDisplay.textContent = CD.Utils.formatTime(currentMs);
     }
+  }
 
-    // Actualizar botón play/pause
+  function updatePlayButton() {
     var playBtn = document.getElementById('cd-play-btn');
     if (playBtn) {
       var isPlaying = CD.State.get('isPlaying');
@@ -168,9 +199,6 @@ CD.TimelineUI = (function() {
     }
   }
 
-  /**
-   * Eventos de click y drag en la barra.
-   */
   function bindEvents() {
     if (!container) return;
 
@@ -183,25 +211,20 @@ CD.TimelineUI = (function() {
     });
 
     document.addEventListener('mousemove', function(e) {
-      if (isDragging) {
-        seekFromEvent(e, barWrapper);
-      }
+      if (isDragging) seekFromEvent(e, barWrapper);
     });
 
     document.addEventListener('mouseup', function() {
       isDragging = false;
     });
 
-    // Touch support
     barWrapper.addEventListener('touchstart', function(e) {
       isDragging = true;
       seekFromEvent(e.touches[0], barWrapper);
     }, { passive: true });
 
     document.addEventListener('touchmove', function(e) {
-      if (isDragging) {
-        seekFromEvent(e.touches[0], barWrapper);
-      }
+      if (isDragging) seekFromEvent(e.touches[0], barWrapper);
     }, { passive: true });
 
     document.addEventListener('touchend', function() {
@@ -214,14 +237,15 @@ CD.TimelineUI = (function() {
     var x = e.clientX - rect.left;
     var percent = Math.max(0, Math.min(1, x / rect.width));
 
-    var segments = CD.State.get('segments');
-    var totalDuration = CD.Utils.getTotalEditedDuration(segments);
-    var editedMs = Math.round(percent * totalDuration);
+    var totalMs = CD.State.get('videoDurationMs') || CD.Player.getVideoDuration();
+    if (totalMs <= 0) return;
 
-    CD.Player.seekToEditedTime(editedMs);
+    var sourceMs = Math.round(percent * totalMs);
+
+    // Seek directo al source time
+    CD.Player.seekToSourceDirect(sourceMs);
   }
 
-  // API pública
   return {
     init: init,
     renderSegments: renderSegments,

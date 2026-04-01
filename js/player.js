@@ -1,12 +1,9 @@
 /**
  * CutterDuper — Controlador de YouTube Player
  * ==============================================
- * Reproduce solo segmentos aprobados, salta gaps, mantiene timeline editada.
- *
- * NOTA IMPORTANTE sobre latencia:
- * YouTube IFrame API seekTo() NO es instantáneo. Existe una latencia
- * de ~100-500ms entre el seekTo() y cuando el video realmente llega
- * al punto solicitado. Esto es una limitación de la API, no un bug.
+ * Dos modos de reproducción:
+ * - 'full': reproduce el video completo sin interrupciones
+ * - 'segments': reproduce solo los segmentos definidos, salta gaps
  */
 var CD = window.CD || {};
 
@@ -16,9 +13,6 @@ CD.Player = (function() {
   var pollingTimer = null;
   var isTransitioning = false;
 
-  /**
-   * Inicializa el YouTube IFrame Player.
-   */
   function init(containerId, videoId) {
     return new Promise(function(resolve, reject) {
       if (!window.YT || !window.YT.Player) {
@@ -31,7 +25,7 @@ CD.Player = (function() {
         width: '100%',
         height: '100%',
         playerVars: {
-          controls: 1,         // Mostrar controles nativos de YouTube
+          controls: 1,
           modestbranding: 1,
           rel: 0,
           iv_load_policy: 3,
@@ -39,36 +33,41 @@ CD.Player = (function() {
         },
         events: {
           onReady: function() {
+            // Guardar duración del video
+            setTimeout(function() {
+              var dur = getVideoDuration();
+              if (dur > 0) {
+                CD.State.set({ videoDurationMs: dur });
+              }
+            }, 500);
             resolve(ytPlayer);
           },
           onStateChange: onPlayerStateChange,
           onError: function(event) {
-            var errorMessages = {
+            var msgs = {
               2: 'ID de video invalido',
               5: 'Error de contenido HTML5',
               100: 'Video no encontrado o eliminado',
               101: 'Video no permite ser embebido',
               150: 'Video no permite ser embebido'
             };
-            var msg = errorMessages[event.data] || 'Error desconocido del player (' + event.data + ')';
-            CD.State.set({ error: msg });
-            console.error('YouTube Player Error:', msg);
+            CD.State.set({ error: msgs[event.data] || 'Error del player' });
           }
         }
       });
     });
   }
 
-  /**
-   * Maneja cambios de estado del player de YouTube.
-   * Este evento SÍ se dispara siempre — tanto si el usuario usa controles nativos
-   * como si usamos playVideo()/pauseVideo() programáticamente.
-   */
   function onPlayerStateChange(event) {
     switch (event.data) {
       case YT.PlayerState.PLAYING:
         CD.State.set({ isPlaying: true });
         startPolling();
+        // Capturar duración si no la tenemos
+        if (!CD.State.get('videoDurationMs')) {
+          var dur = getVideoDuration();
+          if (dur > 0) CD.State.set({ videoDurationMs: dur });
+        }
         break;
       case YT.PlayerState.PAUSED:
         if (!isTransitioning) {
@@ -97,62 +96,53 @@ CD.Player = (function() {
     }
   }
 
-  /**
-   * Ciclo de polling principal.
-   * Funciona en dos modos:
-   * - CON segmentos: mantiene timeline editada, salta gaps, detecta fin de segmento
-   * - SIN segmentos: simplemente actualiza la posición actual
-   */
   function pollPosition() {
     if (!ytPlayer || isTransitioning) return;
     if (typeof ytPlayer.getCurrentTime !== 'function') return;
 
     var currentSourceMs = Math.round(ytPlayer.getCurrentTime() * 1000);
     var segments = CD.State.get('segments');
+    var mode = CD.State.get('playbackMode');
 
-    // --- Modo sin segmentos: solo trackear posición ---
-    if (!segments || segments.length === 0) {
-      CD.State.set({
-        currentSourceMs: currentSourceMs,
-        currentEditedMs: currentSourceMs
-      });
+    // Actualizar source time siempre
+    CD.State.set({ currentSourceMs: currentSourceMs });
+
+    // Si no hay segmentos o modo completo, solo trackear posición
+    if (!segments || segments.length === 0 || mode === 'full') {
+      CD.State.set({ currentEditedMs: currentSourceMs });
       return;
     }
 
-    // --- Modo con segmentos ---
+    // --- Modo 'segments': saltar gaps ---
     var currentSegIdx = CD.State.get('currentSegmentIndex');
 
     if (currentSegIdx >= 0 && currentSegIdx < segments.length) {
-      var currentSeg = segments[currentSegIdx];
-      var segEndMs = Number(currentSeg.source_end_ms);
-      var segStartMs = Number(currentSeg.source_start_ms);
+      var seg = segments[currentSegIdx];
+      var segEnd = Number(seg.source_end_ms);
+      var segStart = Number(seg.source_start_ms);
 
-      // Llegamos al final del segmento?
-      if (currentSourceMs >= segEndMs - CD.Config.SEGMENT_END_TOLERANCE_MS) {
+      // Fin del segmento?
+      if (currentSourceMs >= segEnd - CD.Config.SEGMENT_END_TOLERANCE_MS) {
         handleSegmentEnd(currentSegIdx);
         return;
       }
 
-      // Estamos dentro del segmento? Actualizar posición editada
-      if (currentSourceMs >= segStartMs && currentSourceMs < segEndMs) {
-        var offset = currentSourceMs - segStartMs;
-        var editedMs = Number(currentSeg.edited_start_ms) + offset;
+      // Dentro del segmento? Actualizar edited time
+      if (currentSourceMs >= segStart && currentSourceMs < segEnd) {
+        var offset = currentSourceMs - segStart;
         CD.State.set({
-          currentSourceMs: currentSourceMs,
-          currentEditedMs: editedMs
+          currentEditedMs: Number(seg.edited_start_ms) + offset
         });
         return;
       }
     }
 
-    // El source time no coincide con ningún segmento actual.
-    // Buscar en qué segmento estamos realmente.
+    // Buscar si estamos dentro de algún segmento
     var editedMs = CD.Utils.sourceToEdited(currentSourceMs, segments);
     if (editedMs !== null) {
       var found = CD.Utils.findSegmentAtEditedTime(editedMs, segments);
       if (found) {
         CD.State.set({
-          currentSourceMs: currentSourceMs,
           currentEditedMs: editedMs,
           currentSegmentIndex: found.index
         });
@@ -160,19 +150,40 @@ CD.Player = (function() {
       }
     }
 
-    // Estamos en una zona NO incluida en el montaje. Actualizar posición sin editedMs.
-    CD.State.set({ currentSourceMs: currentSourceMs });
+    // Estamos fuera de todos los segmentos — saltar al siguiente
+    var nextSeg = findNextSegmentAfter(currentSourceMs, segments);
+    if (nextSeg !== null) {
+      jumpToSegment(nextSeg);
+    } else {
+      // Pasamos todos los segmentos — fin del montaje
+      pause();
+      var totalDuration = CD.Utils.getTotalEditedDuration(segments);
+      CD.State.set({
+        isPlaying: false,
+        currentEditedMs: totalDuration,
+        currentSegmentIndex: segments.length - 1
+      });
+      stopPolling();
+    }
   }
 
   /**
-   * Maneja el fin de un segmento.
+   * Encuentra el índice del siguiente segmento cuyo source_start_ms > sourceMs.
    */
+  function findNextSegmentAfter(sourceMs, segments) {
+    for (var i = 0; i < segments.length; i++) {
+      if (Number(segments[i].source_start_ms) > sourceMs) {
+        return i;
+      }
+    }
+    return null;
+  }
+
   function handleSegmentEnd(segmentIndex) {
     var segments = CD.State.get('segments');
     var nextIndex = segmentIndex + 1;
 
     if (nextIndex >= segments.length) {
-      // Fin del montaje
       pause();
       var totalDuration = CD.Utils.getTotalEditedDuration(segments);
       CD.State.set({
@@ -187,9 +198,6 @@ CD.Player = (function() {
     jumpToSegment(nextIndex);
   }
 
-  /**
-   * Salta a un segmento específico.
-   */
   function jumpToSegment(segmentIndex) {
     var segments = CD.State.get('segments');
     if (segmentIndex < 0 || segmentIndex >= segments.length) return;
@@ -223,31 +231,24 @@ CD.Player = (function() {
   function play() {
     if (!ytPlayer || typeof ytPlayer.playVideo !== 'function') return;
 
+    var mode = CD.State.get('playbackMode');
     var segments = CD.State.get('segments');
 
-    // Sin segmentos: simplemente reproducir el video
-    if (!segments || segments.length === 0) {
-      ytPlayer.playVideo();
-      return;
-    }
+    if (mode === 'segments' && segments && segments.length > 0) {
+      // En modo segmentos, posicionar en el primer segmento si no estamos en uno
+      if (CD.State.get('currentSegmentIndex') < 0) {
+        jumpToSegment(0);
+        setTimeout(function() { if (ytPlayer) ytPlayer.playVideo(); }, 300);
+        return;
+      }
 
-    // Con segmentos: posicionar en el primero si no estamos en ninguno
-    if (CD.State.get('currentSegmentIndex') < 0) {
-      jumpToSegment(0);
-      setTimeout(function() {
-        if (ytPlayer) ytPlayer.playVideo();
-      }, 300);
-      return;
-    }
-
-    // Al final del montaje? Reiniciar
-    var totalDuration = CD.Utils.getTotalEditedDuration(segments);
-    if (CD.State.get('currentEditedMs') >= totalDuration) {
-      jumpToSegment(0);
-      setTimeout(function() {
-        if (ytPlayer) ytPlayer.playVideo();
-      }, 300);
-      return;
+      // Al final del montaje? Reiniciar
+      var totalDuration = CD.Utils.getTotalEditedDuration(segments);
+      if (CD.State.get('currentEditedMs') >= totalDuration) {
+        jumpToSegment(0);
+        setTimeout(function() { if (ytPlayer) ytPlayer.playVideo(); }, 300);
+        return;
+      }
     }
 
     ytPlayer.playVideo();
@@ -268,14 +269,39 @@ CD.Player = (function() {
   }
 
   /**
-   * Seek a un punto en la timeline editada (en ms).
+   * Seek directo a un source time (usado por la barra de timeline).
+   * No convierte — va directo al punto del video original.
+   */
+  function seekToSourceDirect(sourceMs) {
+    if (!ytPlayer || typeof ytPlayer.seekTo !== 'function') return;
+
+    var segments = CD.State.get('segments');
+
+    // Actualizar segment index si aplica
+    if (segments && segments.length > 0) {
+      var editedMs = CD.Utils.sourceToEdited(sourceMs, segments);
+      if (editedMs !== null) {
+        var found = CD.Utils.findSegmentAtEditedTime(editedMs, segments);
+        if (found) {
+          CD.State.set({
+            currentSegmentIndex: found.index,
+            currentEditedMs: editedMs
+          });
+        }
+      }
+    }
+
+    CD.State.set({ currentSourceMs: sourceMs });
+    ytPlayer.seekTo(sourceMs / 1000, true);
+  }
+
+  /**
+   * Seek a un punto en la timeline editada.
    */
   function seekToEditedTime(editedMs) {
     var segments = CD.State.get('segments');
     if (!segments || segments.length === 0) {
-      // Sin segmentos, seek directo
-      seekToSource(editedMs);
-      CD.State.set({ currentEditedMs: editedMs, currentSourceMs: editedMs });
+      seekToSourceDirect(editedMs);
       return;
     }
 
@@ -294,9 +320,6 @@ CD.Player = (function() {
     seekToSource(result.source_time_ms);
   }
 
-  /**
-   * Seek interno al video fuente de YouTube.
-   */
   function seekToSource(sourceMs) {
     if (!ytPlayer || typeof ytPlayer.seekTo !== 'function') return;
     ytPlayer.seekTo(sourceMs / 1000, true);
@@ -321,6 +344,7 @@ CD.Player = (function() {
     pause: pause,
     togglePlayPause: togglePlayPause,
     seekToEditedTime: seekToEditedTime,
+    seekToSourceDirect: seekToSourceDirect,
     jumpToSegment: jumpToSegment,
     getVideoDuration: getVideoDuration,
     destroy: destroy
