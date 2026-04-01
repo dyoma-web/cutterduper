@@ -74,21 +74,22 @@ CD.App = (function() {
     Promise.all([
       CD.API.getProject(projectId),
       CD.API.getSegments(projectId),
-      CD.API.getComments(projectId)
+      CD.API.getComments(projectId),
+      CD.API.getCategories(projectId)
     ])
     .then(function(results) {
       var project = results[0].project;
       var rawSegments = results[1].segments;
       var comments = results[2].comments;
+      var categories = results[3].categories;
 
-      // Construir timeline editada
       var segments = CD.Utils.buildEditedTimeline(rawSegments);
 
-      // Actualizar estado
       CD.State.set({
         project: project,
         segments: segments,
         comments: comments,
+        categories: categories,
         isLoading: false,
         currentSegmentIndex: segments.length > 0 ? 0 : -1
       });

@@ -158,11 +158,23 @@ CD.API = (function() {
     });
   }
 
+  function getCategories(projectId) {
+    return apiGet({ action: 'getCategories', projectId: projectId });
+  }
+
+  function saveCategory(projectId, categoryData) {
+    var body = Object.assign({ action: 'saveCategory', projectId: projectId }, categoryData);
+    return apiPost(body);
+  }
+
+  function deleteCategory(categoryId) {
+    return apiPost({ action: 'deleteCategory', categoryId: categoryId });
+  }
+
   function ping() {
     return apiGet({ action: 'ping' });
   }
 
-  // API pública
   return {
     getProject: getProject,
     getProjects: getProjects,
@@ -175,6 +187,9 @@ CD.API = (function() {
     getComments: getComments,
     addComment: addComment,
     deleteComment: deleteComment,
+    getCategories: getCategories,
+    saveCategory: saveCategory,
+    deleteCategory: deleteCategory,
     unlock: unlock,
     lock: lock,
     ping: ping

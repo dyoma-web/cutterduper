@@ -20,9 +20,12 @@ CD.State = (function() {
     currentSegmentIndex: -1,// Índice del segmento actual
     activeCommentId: null,  // ID del comentario activo (resaltado)
     isLoading: false,       // Cargando datos
-    error: null,            // Último error
+    error: null,            // Ultimo error
     playbackMode: 'full',   // 'full' = video completo, 'segments' = solo bloques
-    videoDurationMs: 0      // Duración total del video fuente
+    videoDurationMs: 0,     // Duracion total del video fuente
+    categories: [],         // Categorias del proyecto
+    showCommentMarkers: true, // Mostrar marcadores de comentarios en timeline
+    editingSegmentId: null  // ID del segmento que se esta editando
   };
 
   // Listeners por clave de estado
