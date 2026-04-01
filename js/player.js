@@ -7,7 +7,6 @@
  * YouTube IFrame API seekTo() NO es instantáneo. Existe una latencia
  * de ~100-500ms entre el seekTo() y cuando el video realmente llega
  * al punto solicitado. Esto es una limitación de la API, no un bug.
- * Se mitiga pero NO se puede eliminar al 100%.
  */
 var CD = window.CD || {};
 
@@ -16,7 +15,6 @@ CD.Player = (function() {
   var ytPlayer = null;
   var pollingTimer = null;
   var isTransitioning = false;
-  var pendingSeek = null;
 
   /**
    * Inicializa el YouTube IFrame Player.
@@ -33,13 +31,11 @@ CD.Player = (function() {
         width: '100%',
         height: '100%',
         playerVars: {
-          controls: 0,         // Ocultar controles nativos
-          disablekb: 1,        // Deshabilitar teclado nativo
-          modestbranding: 1,   // Branding mínimo
-          rel: 0,              // No mostrar videos relacionados
-          iv_load_policy: 3,   // No anotaciones
-          fs: 0,               // No fullscreen nativo
-          playsinline: 1       // Inline en mobile
+          controls: 1,         // Mostrar controles nativos de YouTube
+          modestbranding: 1,
+          rel: 0,
+          iv_load_policy: 3,
+          playsinline: 1
         },
         events: {
           onReady: function() {
@@ -48,7 +44,7 @@ CD.Player = (function() {
           onStateChange: onPlayerStateChange,
           onError: function(event) {
             var errorMessages = {
-              2: 'ID de video inválido',
+              2: 'ID de video invalido',
               5: 'Error de contenido HTML5',
               100: 'Video no encontrado o eliminado',
               101: 'Video no permite ser embebido',
@@ -65,14 +61,14 @@ CD.Player = (function() {
 
   /**
    * Maneja cambios de estado del player de YouTube.
+   * Este evento SÍ se dispara siempre — tanto si el usuario usa controles nativos
+   * como si usamos playVideo()/pauseVideo() programáticamente.
    */
   function onPlayerStateChange(event) {
     switch (event.data) {
       case YT.PlayerState.PLAYING:
-        if (!isTransitioning) {
-          CD.State.set({ isPlaying: true });
-          startPolling();
-        }
+        CD.State.set({ isPlaying: true });
+        startPolling();
         break;
       case YT.PlayerState.PAUSED:
         if (!isTransitioning) {
@@ -83,24 +79,12 @@ CD.Player = (function() {
         CD.State.set({ isPlaying: false });
         stopPolling();
         break;
-      case YT.PlayerState.BUFFERING:
-        // No hacer nada especial, el polling se encarga
-        break;
     }
   }
 
   // ============================================================
-  // POLLING — El corazón del sistema
+  // POLLING
   // ============================================================
-  // ¿Por qué polling y no solo eventos del player?
-  // Porque YouTube solo emite eventos de cambio de estado (play/pause/end),
-  // NO emite eventos continuos de posición. Necesitamos saber la posición
-  // actual del video constantemente para:
-  // 1. Actualizar la timeline editada
-  // 2. Detectar cuándo se llega al fin de un segmento
-  // 3. Sincronizar comentarios
-  // 4. Detectar si YouTube se desincronizó del tiempo esperado
-
   function startPolling() {
     stopPolling();
     pollingTimer = setInterval(pollPosition, CD.Config.POLLING_INTERVAL_MS);
@@ -115,31 +99,41 @@ CD.Player = (function() {
 
   /**
    * Ciclo de polling principal.
-   * Se ejecuta cada POLLING_INTERVAL_MS mientras el video está reproduciéndose.
+   * Funciona en dos modos:
+   * - CON segmentos: mantiene timeline editada, salta gaps, detecta fin de segmento
+   * - SIN segmentos: simplemente actualiza la posición actual
    */
   function pollPosition() {
     if (!ytPlayer || isTransitioning) return;
     if (typeof ytPlayer.getCurrentTime !== 'function') return;
 
-    var segments = CD.State.get('segments');
-    if (!segments || segments.length === 0) return;
-
     var currentSourceMs = Math.round(ytPlayer.getCurrentTime() * 1000);
+    var segments = CD.State.get('segments');
+
+    // --- Modo sin segmentos: solo trackear posición ---
+    if (!segments || segments.length === 0) {
+      CD.State.set({
+        currentSourceMs: currentSourceMs,
+        currentEditedMs: currentSourceMs
+      });
+      return;
+    }
+
+    // --- Modo con segmentos ---
     var currentSegIdx = CD.State.get('currentSegmentIndex');
 
-    // Verificar si seguimos dentro del segmento actual
     if (currentSegIdx >= 0 && currentSegIdx < segments.length) {
       var currentSeg = segments[currentSegIdx];
       var segEndMs = Number(currentSeg.source_end_ms);
       var segStartMs = Number(currentSeg.source_start_ms);
 
-      // ¿Llegamos al final del segmento?
+      // Llegamos al final del segmento?
       if (currentSourceMs >= segEndMs - CD.Config.SEGMENT_END_TOLERANCE_MS) {
         handleSegmentEnd(currentSegIdx);
         return;
       }
 
-      // ¿Estamos dentro del segmento? Actualizar posición
+      // Estamos dentro del segmento? Actualizar posición editada
       if (currentSourceMs >= segStartMs && currentSourceMs < segEndMs) {
         var offset = currentSourceMs - segStartMs;
         var editedMs = Number(currentSeg.edited_start_ms) + offset;
@@ -149,25 +143,36 @@ CD.Player = (function() {
         });
         return;
       }
-
-      // YouTube se desincronizó — el tiempo real no corresponde al segmento esperado
-      // Esto puede pasar si YouTube hace buffering y salta.
-      // Corregir: volver al inicio del segmento actual.
-      console.warn('Desincronización detectada. Esperado segmento', currentSegIdx,
-        '(' + segStartMs + '-' + segEndMs + '), actual:', currentSourceMs);
-      seekToSource(segStartMs);
     }
+
+    // El source time no coincide con ningún segmento actual.
+    // Buscar en qué segmento estamos realmente.
+    var editedMs = CD.Utils.sourceToEdited(currentSourceMs, segments);
+    if (editedMs !== null) {
+      var found = CD.Utils.findSegmentAtEditedTime(editedMs, segments);
+      if (found) {
+        CD.State.set({
+          currentSourceMs: currentSourceMs,
+          currentEditedMs: editedMs,
+          currentSegmentIndex: found.index
+        });
+        return;
+      }
+    }
+
+    // Estamos en una zona NO incluida en el montaje. Actualizar posición sin editedMs.
+    CD.State.set({ currentSourceMs: currentSourceMs });
   }
 
   /**
-   * Maneja el fin de un segmento: salta al siguiente o termina la reproducción.
+   * Maneja el fin de un segmento.
    */
   function handleSegmentEnd(segmentIndex) {
     var segments = CD.State.get('segments');
     var nextIndex = segmentIndex + 1;
 
     if (nextIndex >= segments.length) {
-      // Fin de la reproducción editada
+      // Fin del montaje
       pause();
       var totalDuration = CD.Utils.getTotalEditedDuration(segments);
       CD.State.set({
@@ -179,13 +184,11 @@ CD.Player = (function() {
       return;
     }
 
-    // Saltar al siguiente segmento
     jumpToSegment(nextIndex);
   }
 
   /**
    * Salta a un segmento específico.
-   * Maneja la transición con pausa breve para minimizar glitch visual.
    */
   function jumpToSegment(segmentIndex) {
     var segments = CD.State.get('segments');
@@ -197,12 +200,6 @@ CD.Player = (function() {
 
     isTransitioning = true;
 
-    // Pausar brevemente para evitar que se vea un frame del gap
-    if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
-      ytPlayer.pauseVideo();
-    }
-
-    // Seek al inicio del siguiente segmento
     seekToSource(sourceStartMs);
 
     CD.State.set({
@@ -211,58 +208,55 @@ CD.Player = (function() {
       currentEditedMs: Number(segment.edited_start_ms)
     });
 
-    // Esperar un momento para que YouTube haga el seek, luego reanudar
     setTimeout(function() {
       isTransitioning = false;
       if (wasPlaying && ytPlayer && typeof ytPlayer.playVideo === 'function') {
         ytPlayer.playVideo();
       }
-    }, 200); // 200ms de gracia para que YouTube procese el seekTo
+    }, 250);
   }
 
   // ============================================================
-  // CONTROLES PÚBLICOS
+  // CONTROLES PUBLICOS
   // ============================================================
 
   function play() {
-    var segments = CD.State.get('segments');
-    if (!segments || segments.length === 0) return;
+    if (!ytPlayer || typeof ytPlayer.playVideo !== 'function') return;
 
-    // Si no hay segmento actual, empezar desde el primero
+    var segments = CD.State.get('segments');
+
+    // Sin segmentos: simplemente reproducir el video
+    if (!segments || segments.length === 0) {
+      ytPlayer.playVideo();
+      return;
+    }
+
+    // Con segmentos: posicionar en el primero si no estamos en ninguno
     if (CD.State.get('currentSegmentIndex') < 0) {
       jumpToSegment(0);
       setTimeout(function() {
         if (ytPlayer) ytPlayer.playVideo();
-        CD.State.set({ isPlaying: true });
-        startPolling();
       }, 300);
       return;
     }
 
-    // Verificar si estamos al final del montaje
+    // Al final del montaje? Reiniciar
     var totalDuration = CD.Utils.getTotalEditedDuration(segments);
     if (CD.State.get('currentEditedMs') >= totalDuration) {
-      // Reiniciar desde el inicio
       jumpToSegment(0);
       setTimeout(function() {
         if (ytPlayer) ytPlayer.playVideo();
-        CD.State.set({ isPlaying: true });
-        startPolling();
       }, 300);
       return;
     }
 
-    if (ytPlayer) ytPlayer.playVideo();
-    CD.State.set({ isPlaying: true });
-    startPolling();
+    ytPlayer.playVideo();
   }
 
   function pause() {
     if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
       ytPlayer.pauseVideo();
     }
-    CD.State.set({ isPlaying: false });
-    stopPolling();
   }
 
   function togglePlayPause() {
@@ -275,40 +269,29 @@ CD.Player = (function() {
 
   /**
    * Seek a un punto en la timeline editada (en ms).
-   * Esta es la función principal para navegación del usuario.
    */
   function seekToEditedTime(editedMs) {
     var segments = CD.State.get('segments');
-    if (!segments || segments.length === 0) return;
+    if (!segments || segments.length === 0) {
+      // Sin segmentos, seek directo
+      seekToSource(editedMs);
+      CD.State.set({ currentEditedMs: editedMs, currentSourceMs: editedMs });
+      return;
+    }
 
-    // Clamp al rango válido
     var totalDuration = CD.Utils.getTotalEditedDuration(segments);
     editedMs = Math.max(0, Math.min(editedMs, totalDuration));
 
     var result = CD.Utils.editedToSource(editedMs, segments);
     if (!result) return;
 
-    var wasPlaying = CD.State.get('isPlaying');
-
-    // Si cambió de segmento, hacer jump
-    var currentSegIdx = CD.State.get('currentSegmentIndex');
-    if (result.segment_index !== currentSegIdx) {
-      CD.State.set({ currentSegmentIndex: result.segment_index });
-    }
-
-    seekToSource(result.source_time_ms);
-
     CD.State.set({
+      currentSegmentIndex: result.segment_index,
       currentEditedMs: editedMs,
       currentSourceMs: result.source_time_ms
     });
 
-    // Si estaba reproduciéndose, continuar
-    if (wasPlaying) {
-      setTimeout(function() {
-        if (ytPlayer) ytPlayer.playVideo();
-      }, 150);
-    }
+    seekToSource(result.source_time_ms);
   }
 
   /**
@@ -319,17 +302,11 @@ CD.Player = (function() {
     ytPlayer.seekTo(sourceMs / 1000, true);
   }
 
-  /**
-   * Obtiene la duración total del video fuente de YouTube.
-   */
   function getVideoDuration() {
     if (!ytPlayer || typeof ytPlayer.getDuration !== 'function') return 0;
     return Math.round(ytPlayer.getDuration() * 1000);
   }
 
-  /**
-   * Destruye el player.
-   */
   function destroy() {
     stopPolling();
     if (ytPlayer && typeof ytPlayer.destroy === 'function') {
@@ -338,7 +315,6 @@ CD.Player = (function() {
     ytPlayer = null;
   }
 
-  // API pública
   return {
     init: init,
     play: play,
