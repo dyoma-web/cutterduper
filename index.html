@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CutterDuper — Simulador de Edición</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- ============================================================ -->
+  <!-- LOADING / SELECTOR DE PROYECTO                                -->
+  <!-- ============================================================ -->
+  <div id="cd-loading" class="cd-loading">
+    <div class="cd-loading-spinner"></div>
+    <p>Cargando CutterDuper...</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- APP PRINCIPAL (oculta hasta que cargue el proyecto)           -->
+  <!-- ============================================================ -->
+  <div id="cd-app" class="cd-app" style="display: none;">
+
+    <!-- Header -->
+    <header class="cd-header">
+      <div class="cd-header__brand">
+        <a href="?" class="cd-header__home" title="Volver al inicio">
+          <h1 class="cd-header__logo">CutterDuper</h1>
+        </a>
+        <span class="cd-header__badge">Preview</span>
+      </div>
+      <div class="cd-header__project">
+        <h2 id="cd-project-title"></h2>
+        <p id="cd-project-desc"></p>
+      </div>
+      <div class="cd-header__disclaimer" id="cd-disclaimer"></div>
+    </header>
+
+    <!-- Área principal: Player + Editor -->
+    <main class="cd-main">
+
+      <!-- Columna izquierda: Player + Timeline -->
+      <div class="cd-main__player-area">
+        <!-- YouTube Player -->
+        <div class="cd-player-wrapper">
+          <div id="cd-player"></div>
+        </div>
+
+        <!-- Timeline editada -->
+        <div id="cd-timeline-container"></div>
+
+        <!-- Panel editor (debajo del timeline) -->
+        <div id="cd-editor-container"></div>
+      </div>
+
+      <!-- Columna derecha: Comentarios -->
+      <div class="cd-main__comments-area">
+        <div id="cd-comments-container"></div>
+      </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="cd-footer">
+      <p>CutterDuper &mdash; Previsualización de edición. No es un render final. El video fuente no se modifica.</p>
+    </footer>
+
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCRIPTS                                                       -->
+  <!-- ============================================================ -->
+  <!-- YouTube IFrame API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+
+  <!-- CutterDuper (orden importa) -->
+  <script src="js/config.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/timeline-ui.js"></script>
+  <script src="js/comments.js"></script>
+  <script src="js/editor.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>
