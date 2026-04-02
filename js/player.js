@@ -245,17 +245,21 @@ CD.Player = (function() {
       var fadeInMs = Number(segment.fade_in_ms) || CD.Overlay.FADE_DEFAULT_MS;
 
       setTimeout(function() {
-        // Start playback first, then fade in the overlay
-        if (wasPlaying && ytPlayer && typeof ytPlayer.playVideo === 'function') {
-          ytPlayer.playVideo();
-        }
         isTransitioning = false;
 
-        if (transIn !== 'direct_cut' && CD.Overlay) {
-          // Fade in: overlay starts opaque, fades to transparent revealing video
-          CD.Overlay.fadeIn(transIn, fadeInMs);
-        } else if (CD.Overlay) {
-          CD.Overlay.hide();
+        if (wasPlaying) {
+          // Was playing: execute fade-in transition and resume
+          if (transIn !== 'direct_cut' && CD.Overlay) {
+            CD.Overlay.fadeIn(transIn, fadeInMs);
+          } else if (CD.Overlay) {
+            CD.Overlay.hide();
+          }
+          if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
+            ytPlayer.playVideo();
+          }
+        } else {
+          // Was paused: just hide overlay, no fade
+          if (CD.Overlay) CD.Overlay.hide();
         }
       }, 250);
 
