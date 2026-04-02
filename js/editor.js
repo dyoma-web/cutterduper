@@ -134,26 +134,65 @@ CD.Editor = (function() {
       catOptions += '<option value="' + categories[i].id + '">' + categories[i].name + '</option>';
     }
 
+    var transOptions =
+      '<option value="direct_cut">Corte directo</option>' +
+      '<option value="fade_black">Fade a negro</option>' +
+      '<option value="fade_white">Fade a blanco</option>';
+
     formEl.innerHTML =
       '<h4 id="cd-seg-form-title">Nuevo segmento</h4>' +
-      '<div class="cd-form-grid">' +
-        '<label>Titulo (opcional)<input type="text" id="cd-seg-title" class="cd-input" placeholder="Ej: Introduccion" maxlength="200"></label>' +
+      // Type selector
+      '<div class="cd-form-grid cd-form-grid--2" style="margin-bottom:0.5rem">' +
+        '<label>Tipo<select id="cd-seg-type" class="cd-input">' +
+          '<option value="video">Video</option>' +
+          '<option value="slide_text">Slide: Texto</option>' +
+          '<option value="slide_image">Slide: Imagen</option>' +
+          '<option value="slide_mixed">Slide: Texto + Imagen</option>' +
+        '</select></label>' +
+        '<label>Titulo<input type="text" id="cd-seg-title" class="cd-input" placeholder="Ej: Introduccion" maxlength="200"></label>' +
+      '</div>' +
+      // Video fields
+      '<div id="cd-seg-video-fields" class="cd-form-grid">' +
         '<label>Inicio (fuente)' +
           '<div style="display:flex;gap:4px;">' +
             '<input type="text" id="cd-seg-start" class="cd-input" placeholder="MM:SS" value="' + currentTime + '">' +
-            '<button id="cd-seg-use-start" class="cd-btn cd-btn--xs cd-btn--secondary" title="Capturar tiempo actual">Ahora</button>' +
+            '<button id="cd-seg-use-start" class="cd-btn cd-btn--xs cd-btn--secondary">Ahora</button>' +
           '</div>' +
         '</label>' +
         '<label>Fin (fuente)' +
           '<div style="display:flex;gap:4px;">' +
             '<input type="text" id="cd-seg-end" class="cd-input" placeholder="MM:SS">' +
-            '<button id="cd-seg-use-end" class="cd-btn cd-btn--xs cd-btn--secondary" title="Capturar tiempo actual">Ahora</button>' +
+            '<button id="cd-seg-use-end" class="cd-btn cd-btn--xs cd-btn--secondary">Ahora</button>' +
           '</div>' +
         '</label>' +
       '</div>' +
-      '<div class="cd-form-grid cd-form-grid--2">' +
+      // Slide fields (hidden by default)
+      '<div id="cd-seg-slide-fields" style="display:none">' +
+        '<div class="cd-form-grid">' +
+          '<label>Duracion (seg)<input type="number" id="cd-seg-duration" class="cd-input" value="5" min="1" max="30"></label>' +
+          '<label>Color fondo<input type="color" id="cd-seg-bg-color" class="cd-input-color" value="#1a1d27"></label>' +
+          '<label>Color texto<input type="color" id="cd-seg-text-color" class="cd-input-color" value="#ffffff"></label>' +
+        '</div>' +
+        '<div id="cd-seg-slide-text-fields">' +
+          '<div class="cd-form-grid cd-form-grid--2">' +
+            '<label>Subtitulo<input type="text" id="cd-seg-subtitle" class="cd-input" placeholder="Subtitulo (opcional)" maxlength="200"></label>' +
+            '<label>Cuerpo<textarea id="cd-seg-body" class="cd-input" placeholder="Texto del slide" rows="2" maxlength="500"></textarea></label>' +
+          '</div>' +
+        '</div>' +
+        '<div id="cd-seg-slide-image-fields" style="display:none">' +
+          '<label>URL de imagen<input type="text" id="cd-seg-image-url" class="cd-input" placeholder="https://..."></label>' +
+          '<label>Pie de imagen<input type="text" id="cd-seg-caption" class="cd-input" placeholder="Descripcion (opcional)" maxlength="200"></label>' +
+        '</div>' +
+      '</div>' +
+      // Transitions
+      '<div class="cd-form-grid" style="margin-top:0.5rem">' +
+        '<label>Transicion entrada<select id="cd-seg-trans-in" class="cd-input">' + transOptions + '</select></label>' +
+        '<label>Transicion salida<select id="cd-seg-trans-out" class="cd-input">' + transOptions + '</select></label>' +
         '<label>Categoria<select id="cd-seg-category" class="cd-input">' + catOptions + '</select></label>' +
+      '</div>' +
+      '<div class="cd-form-grid cd-form-grid--2" style="margin-top:0.3rem">' +
         '<label>Color (opcional)<input type="color" id="cd-seg-color" class="cd-input-color" value="#3b82f6"></label>' +
+        '<span></span>' +
       '</div>' +
       '<div class="cd-editor__form-actions">' +
         '<button id="cd-seg-save" class="cd-btn cd-btn--primary">Agregar segmento</button>' +
@@ -292,6 +331,23 @@ CD.Editor = (function() {
       updatePreview();
     });
 
+    // Type selector toggle
+    var typeSelect = document.getElementById('cd-seg-type');
+    if (typeSelect) {
+      typeSelect.addEventListener('change', function() {
+        var t = typeSelect.value;
+        var videoFields = document.getElementById('cd-seg-video-fields');
+        var slideFields = document.getElementById('cd-seg-slide-fields');
+        var textFields = document.getElementById('cd-seg-slide-text-fields');
+        var imageFields = document.getElementById('cd-seg-slide-image-fields');
+
+        videoFields.style.display = t === 'video' ? 'grid' : 'none';
+        slideFields.style.display = t !== 'video' ? 'block' : 'none';
+        textFields.style.display = (t === 'slide_text' || t === 'slide_mixed') ? 'block' : 'none';
+        imageFields.style.display = (t === 'slide_image' || t === 'slide_mixed') ? 'block' : 'none';
+      });
+    }
+
     // Live preview as user types
     var startInput = document.getElementById('cd-seg-start');
     var endInput = document.getElementById('cd-seg-end');
@@ -378,27 +434,70 @@ CD.Editor = (function() {
   }
 
   function handleSaveSegment() {
+    var segType = document.getElementById('cd-seg-type').value;
     var title = (document.getElementById('cd-seg-title').value || '').trim();
-    var startMs = CD.Utils.parseTime(document.getElementById('cd-seg-start').value);
-    var endMs = CD.Utils.parseTime(document.getElementById('cd-seg-end').value);
     var categoryId = document.getElementById('cd-seg-category').value || '';
     var colorInput = document.getElementById('cd-seg-color').value;
-    // Si hay categoría, no enviar color individual (usará el de la categoría)
     var color = categoryId ? '' : colorInput;
+    var transIn = document.getElementById('cd-seg-trans-in').value;
+    var transOut = document.getElementById('cd-seg-trans-out').value;
     var errorEl = document.getElementById('cd-seg-error');
-
-    if (isNaN(startMs)) { showError(errorEl, 'Tiempo de inicio invalido.'); return; }
-    if (isNaN(endMs)) { showError(errorEl, 'Tiempo de fin invalido.'); return; }
-    if (endMs <= startMs) { showError(errorEl, 'El fin debe ser mayor que el inicio.'); return; }
-    if ((endMs - startMs) < CD.Config.MIN_SEGMENT_DURATION_MS) { showError(errorEl, 'Segmento muy corto (min ' + (CD.Config.MIN_SEGMENT_DURATION_MS / 1000) + 's).'); return; }
 
     var projectId = CD.State.get('project').id;
     var saveBtn = document.getElementById('cd-seg-save');
-    saveBtn.disabled = true;
 
-    var data = { title: title, source_start_ms: startMs, source_end_ms: endMs, category_id: categoryId, color: color };
+    var data = {
+      type: segType,
+      title: title,
+      category_id: categoryId,
+      color: color,
+      transition_in: transIn,
+      transition_out: transOut
+    };
+
+    if (segType === 'video') {
+      var startMs = CD.Utils.parseTime(document.getElementById('cd-seg-start').value);
+      var endMs = CD.Utils.parseTime(document.getElementById('cd-seg-end').value);
+      if (isNaN(startMs)) { showError(errorEl, 'Tiempo de inicio invalido.'); return; }
+      if (isNaN(endMs)) { showError(errorEl, 'Tiempo de fin invalido.'); return; }
+      if (endMs <= startMs) { showError(errorEl, 'El fin debe ser mayor que el inicio.'); return; }
+      if ((endMs - startMs) < CD.Config.MIN_SEGMENT_DURATION_MS) { showError(errorEl, 'Segmento muy corto.'); return; }
+      data.source_start_ms = startMs;
+      data.source_end_ms = endMs;
+    } else {
+      var durationSec = parseFloat(document.getElementById('cd-seg-duration').value);
+      if (isNaN(durationSec) || durationSec < 1) { showError(errorEl, 'Duracion minima: 1 segundo.'); return; }
+      if (durationSec > 30) { showError(errorEl, 'Duracion maxima: 30 segundos.'); return; }
+      data.duration_ms = Math.round(durationSec * 1000);
+      data.source_start_ms = 0;
+      data.source_end_ms = 0;
+
+      // Build payload
+      var payload = {};
+      var bgColor = document.getElementById('cd-seg-bg-color');
+      var textColor = document.getElementById('cd-seg-text-color');
+      if (bgColor) payload.bg_color = bgColor.value;
+      if (textColor) payload.text_color = textColor.value;
+
+      if (segType === 'slide_text' || segType === 'slide_mixed') {
+        var subtitle = document.getElementById('cd-seg-subtitle');
+        var body = document.getElementById('cd-seg-body');
+        if (subtitle) payload.subtitle = subtitle.value;
+        if (body) payload.body = body.value;
+        payload.title = title;
+      }
+      if (segType === 'slide_image' || segType === 'slide_mixed') {
+        var imgUrl = document.getElementById('cd-seg-image-url');
+        var caption = document.getElementById('cd-seg-caption');
+        if (imgUrl) payload.image_url = imgUrl.value;
+        if (caption) payload.caption = caption.value;
+      }
+      data.payload_json = JSON.stringify(payload);
+    }
+
     if (editingSegmentId) data.id = editingSegmentId;
 
+    saveBtn.disabled = true;
     CD.API.saveSegment(projectId, data)
       .then(function() { resetForm(); CD.TimelineUI.removePreview(); return reloadSegments(); })
       .catch(function(err) { showError(errorEl, err.message); })
@@ -443,9 +542,51 @@ CD.Editor = (function() {
     editingSegmentId = segmentId;
     CD.State.set({ editingSegmentId: segmentId });
 
+    var segType = String(seg.type || 'video');
+
+    // Set type and trigger fields toggle
+    var typeSelect = document.getElementById('cd-seg-type');
+    if (typeSelect) {
+      typeSelect.value = segType;
+      typeSelect.dispatchEvent(new Event('change'));
+    }
+
     document.getElementById('cd-seg-title').value = seg.title || '';
-    document.getElementById('cd-seg-start').value = CD.Utils.formatTimePrecise(Number(seg.source_start_ms));
-    document.getElementById('cd-seg-end').value = CD.Utils.formatTimePrecise(Number(seg.source_end_ms));
+
+    if (segType === 'video') {
+      document.getElementById('cd-seg-start').value = CD.Utils.formatTimePrecise(Number(seg.source_start_ms));
+      document.getElementById('cd-seg-end').value = CD.Utils.formatTimePrecise(Number(seg.source_end_ms));
+    } else {
+      var durEl = document.getElementById('cd-seg-duration');
+      if (durEl) durEl.value = (Number(seg.duration_ms) || 5000) / 1000;
+
+      var payload = {};
+      try { payload = JSON.parse(seg.payload_json || '{}'); } catch(e) {}
+
+      var bgEl = document.getElementById('cd-seg-bg-color');
+      var txEl = document.getElementById('cd-seg-text-color');
+      if (bgEl && payload.bg_color) bgEl.value = payload.bg_color;
+      if (txEl && payload.text_color) txEl.value = payload.text_color;
+
+      if (segType === 'slide_text' || segType === 'slide_mixed') {
+        var subEl = document.getElementById('cd-seg-subtitle');
+        var bodyEl = document.getElementById('cd-seg-body');
+        if (subEl) subEl.value = payload.subtitle || '';
+        if (bodyEl) bodyEl.value = payload.body || '';
+      }
+      if (segType === 'slide_image' || segType === 'slide_mixed') {
+        var imgEl = document.getElementById('cd-seg-image-url');
+        var capEl = document.getElementById('cd-seg-caption');
+        if (imgEl) imgEl.value = payload.image_url || '';
+        if (capEl) capEl.value = payload.caption || '';
+      }
+    }
+
+    // Transitions
+    var transInEl = document.getElementById('cd-seg-trans-in');
+    var transOutEl = document.getElementById('cd-seg-trans-out');
+    if (transInEl) transInEl.value = seg.transition_in || 'direct_cut';
+    if (transOutEl) transOutEl.value = seg.transition_out || 'direct_cut';
 
     var catSelect = document.getElementById('cd-seg-category');
     if (catSelect) catSelect.value = seg.category_id || '';

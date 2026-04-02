@@ -181,9 +181,30 @@ CD.Player = (function() {
 
   function handleSegmentEnd(segmentIndex) {
     var segments = CD.State.get('segments');
+    var currentSeg = segments[segmentIndex];
+    var nextIndex = segmentIndex + 1;
+    var transOut = String(currentSeg.transition_out || 'direct_cut');
+
+    // If there's a transition out, play it before moving on
+    if (transOut !== 'direct_cut' && CD.Overlay && !isTransitioning) {
+      isTransitioning = true;
+      if (ytPlayer) ytPlayer.pauseVideo();
+      CD.Overlay.fadeOut(transOut, 400).then(function() {
+        proceedAfterSegment(segmentIndex);
+      });
+      return;
+    }
+
+    proceedAfterSegment(segmentIndex);
+  }
+
+  function proceedAfterSegment(segmentIndex) {
+    var segments = CD.State.get('segments');
     var nextIndex = segmentIndex + 1;
 
     if (nextIndex >= segments.length) {
+      isTransitioning = false;
+      CD.Overlay.hide();
       pause();
       var totalDuration = CD.Utils.getTotalEditedDuration(segments);
       CD.State.set({
@@ -203,25 +224,82 @@ CD.Player = (function() {
     if (segmentIndex < 0 || segmentIndex >= segments.length) return;
 
     var segment = segments[segmentIndex];
-    var sourceStartMs = Number(segment.source_start_ms);
+    var segType = String(segment.type || 'video');
     var wasPlaying = CD.State.get('isPlaying');
-
-    isTransitioning = true;
-
-    seekToSource(sourceStartMs);
 
     CD.State.set({
       currentSegmentIndex: segmentIndex,
-      currentSourceMs: sourceStartMs,
       currentEditedMs: Number(segment.edited_start_ms)
     });
 
-    setTimeout(function() {
-      isTransitioning = false;
-      if (wasPlaying && ytPlayer && typeof ytPlayer.playVideo === 'function') {
-        ytPlayer.playVideo();
+    if (segType === 'video') {
+      // Video segment: seek YouTube and play
+      var sourceStartMs = Number(segment.source_start_ms);
+      isTransitioning = true;
+
+      seekToSource(sourceStartMs);
+      CD.State.set({ currentSourceMs: sourceStartMs });
+
+      // Fade in if the segment has a transition_in
+      var transIn = String(segment.transition_in || 'direct_cut');
+
+      setTimeout(function() {
+        isTransitioning = false;
+        if (transIn !== 'direct_cut' && CD.Overlay) {
+          CD.Overlay.fadeIn(400);
+        } else if (CD.Overlay) {
+          CD.Overlay.hide();
+        }
+        if (wasPlaying && ytPlayer && typeof ytPlayer.playVideo === 'function') {
+          ytPlayer.playVideo();
+        }
+      }, 250);
+
+    } else {
+      // Slide segment: pause YouTube, show slide overlay
+      if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
+        ytPlayer.pauseVideo();
       }
-    }, 250);
+      isTransitioning = true;
+
+      if (CD.Overlay) {
+        CD.Overlay.showSlide(segment).then(function() {
+          // Slide finished — move to next segment
+          var transOut = String(segment.transition_out || 'direct_cut');
+          if (transOut !== 'direct_cut') {
+            CD.Overlay.fadeOut(transOut, 400).then(function() {
+              isTransitioning = false;
+              proceedAfterSegment(segmentIndex);
+            });
+          } else {
+            CD.Overlay.hide();
+            isTransitioning = false;
+            proceedAfterSegment(segmentIndex);
+          }
+        });
+      }
+
+      // Update edited time during slide with a local timer
+      startSlideTimer(segment);
+    }
+  }
+
+  var slideProgressTimer = null;
+
+  function startSlideTimer(segment) {
+    clearInterval(slideProgressTimer);
+    var startTime = Date.now();
+    var editedStart = Number(segment.edited_start_ms);
+    var duration = Number(segment.duration_ms) || 5000;
+
+    slideProgressTimer = setInterval(function() {
+      var elapsed = Date.now() - startTime;
+      if (elapsed >= duration) {
+        clearInterval(slideProgressTimer);
+        return;
+      }
+      CD.State.set({ currentEditedMs: editedStart + elapsed });
+    }, 150);
   }
 
   // ============================================================

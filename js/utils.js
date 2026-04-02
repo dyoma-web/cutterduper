@@ -77,9 +77,14 @@ CD.Utils = (function() {
     var cursor = 0;
     for (var i = 0; i < segments.length; i++) {
       var seg = Object.assign({}, segments[i]);
-      var sourceStart = Number(seg.source_start_ms);
-      var sourceEnd = Number(seg.source_end_ms);
-      var duration = sourceEnd - sourceStart;
+      var segType = String(seg.type || 'video');
+      var duration;
+
+      if (segType === 'video') {
+        duration = Number(seg.source_end_ms) - Number(seg.source_start_ms);
+      } else {
+        duration = Number(seg.duration_ms) || 5000;
+      }
 
       seg.edited_start_ms = cursor;
       seg.edited_end_ms = cursor + duration;

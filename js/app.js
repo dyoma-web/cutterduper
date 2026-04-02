@@ -161,6 +161,7 @@ CD.App = (function() {
     initYouTubePlayer(project.youtube_video_id);
 
     // Inicializar componentes
+    CD.Overlay.init();
     CD.TimelineUI.init('cd-timeline-container');
     CD.SegmentInfo.init('cd-seginfo-container');
     CD.Comments.init('cd-comments-container');

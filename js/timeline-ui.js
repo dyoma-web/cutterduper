@@ -171,6 +171,11 @@ CD.TimelineUI = (function() {
     if (segments && segments.length > 0) {
       for (var i = 0; i < segments.length; i++) {
         var seg = segments[i];
+        var segType = String(seg.type || 'video');
+
+        // Slides don't appear on the source timeline bar
+        if (segType !== 'video') continue;
+
         var startMs = Number(seg.source_start_ms);
         var endMs = Number(seg.source_end_ms);
         var leftPct = (startMs / totalMs) * 100;

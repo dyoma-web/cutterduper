@@ -50,13 +50,27 @@ CD.SegmentInfo = (function() {
     // Find which segment we're in
     var activeSeg = null;
     var activeIdx = -1;
+    // Use currentSegmentIndex from state if overlay is active (slide)
+    var stateIdx = CD.State.get('currentSegmentIndex');
     if (segments && segments.length > 0) {
-      for (var i = 0; i < segments.length; i++) {
-        var s = segments[i];
-        if (currentSourceMs >= Number(s.source_start_ms) && currentSourceMs < Number(s.source_end_ms)) {
-          activeSeg = s;
-          activeIdx = i;
-          break;
+      if (stateIdx >= 0 && stateIdx < segments.length) {
+        var candidate = segments[stateIdx];
+        var cType = String(candidate.type || 'video');
+        if (cType !== 'video' && CD.Overlay && CD.Overlay.isActive()) {
+          activeSeg = candidate;
+          activeIdx = stateIdx;
+        }
+      }
+      if (!activeSeg) {
+        for (var i = 0; i < segments.length; i++) {
+          var s = segments[i];
+          if (String(s.type || 'video') === 'video') {
+            if (currentSourceMs >= Number(s.source_start_ms) && currentSourceMs < Number(s.source_end_ms)) {
+              activeSeg = s;
+              activeIdx = i;
+              break;
+            }
+          }
         }
       }
     }
@@ -133,9 +147,15 @@ CD.SegmentInfo = (function() {
         catBadge = '<span class="cd-editor__cat-badge" style="background:' + (cat.color || '#ccc') + '">' + cat.name + '</span> ';
       }
 
+      var sType = String(seg.type || 'video');
+      var typeBadge = sType !== 'video' ? '<span class="cd-seginfo__type-badge">SLIDE</span> ' : '';
+      var timeInfo = sType === 'video'
+        ? CD.Utils.formatTime(Number(seg.source_start_ms)) + ' -> ' + CD.Utils.formatTime(Number(seg.source_end_ms))
+        : CD.Utils.formatTime(Number(seg.duration_ms) || 5000) + ' (slide)';
+
       item.innerHTML =
-        '<div class="cd-seginfo__item-name">' + catBadge + (seg.title || 'Segmento ' + (i + 1)) + '</div>' +
-        '<div class="cd-seginfo__item-time">' + CD.Utils.formatTime(Number(seg.source_start_ms)) + ' -> ' + CD.Utils.formatTime(Number(seg.source_end_ms)) + '</div>';
+        '<div class="cd-seginfo__item-name">' + typeBadge + catBadge + (seg.title || 'Segmento ' + (i + 1)) + '</div>' +
+        '<div class="cd-seginfo__item-time">' + timeInfo + '</div>';
 
       // Click to jump
       item.addEventListener('click', (function(idx) {

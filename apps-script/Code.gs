@@ -40,7 +40,7 @@ function getSheet(name) {
 
 const SHEET_HEADERS = {
   projects: ['id', 'title', 'description', 'youtube_video_id', 'edit_pin_hash', 'status', 'created_at', 'updated_at'],
-  segments: ['id', 'project_id', 'order_index', 'title', 'source_start_ms', 'source_end_ms', 'edited_start_ms', 'edited_end_ms', 'category_id', 'color', 'created_at', 'updated_at'],
+  segments: ['id', 'project_id', 'order_index', 'title', 'type', 'source_start_ms', 'source_end_ms', 'edited_start_ms', 'edited_end_ms', 'duration_ms', 'category_id', 'color', 'transition_in', 'transition_out', 'payload_json', 'created_at', 'updated_at'],
   categories: ['id', 'project_id', 'name', 'color', 'created_at'],
   comments: ['id', 'project_id', 'edited_time_ms', 'source_time_ms', 'author_label', 'text', 'created_at'],
   edit_sessions: ['project_id', 'token', 'expires_at']
@@ -360,48 +360,72 @@ function handleSaveSegment(body) {
   if (!requireEditor(body)) return errorResponse('No autorizado', 401);
   const projectId = (body.projectId || '').trim();
   if (!projectId) return errorResponse('projectId es obligatorio');
-  const sourceStartMs = parseInt(body.source_start_ms, 10);
-  const sourceEndMs = parseInt(body.source_end_ms, 10);
-  if (isNaN(sourceStartMs) || isNaN(sourceEndMs)) return errorResponse('source_start_ms y source_end_ms deben ser numeros enteros');
-  if (sourceStartMs < 0) return errorResponse('source_start_ms no puede ser negativo');
-  if (sourceEndMs <= sourceStartMs) return errorResponse('source_end_ms debe ser mayor que source_start_ms');
-  if ((sourceEndMs - sourceStartMs) < 500) return errorResponse('El segmento es muy corto (minimo 500ms)');
 
+  const segType = String(body.type || 'video');
   const title = String(body.title || '').substring(0, 200);
   const categoryId = String(body.category_id || '');
   const color = String(body.color || '');
+  const transitionIn = String(body.transition_in || 'direct_cut');
+  const transitionOut = String(body.transition_out || 'direct_cut');
+  const payloadJson = String(body.payload_json || '{}');
   const sheet = getSheet('segments');
   const timestamp = now();
 
-  if (body.id) {
-    const rowIdx = findRowIndex(sheet, 'id', body.id);
-    if (rowIdx < 0) return errorResponse('Segmento no encontrado', 404);
-    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    const row = sheet.getRange(rowIdx, 1, 1, sheet.getLastColumn()).getValues()[0];
-    row[headers.indexOf('title')] = title;
-    row[headers.indexOf('source_start_ms')] = sourceStartMs;
-    row[headers.indexOf('source_end_ms')] = sourceEndMs;
-    if (headers.indexOf('category_id') >= 0) row[headers.indexOf('category_id')] = categoryId;
-    if (headers.indexOf('color') >= 0) row[headers.indexOf('color')] = color;
-    row[headers.indexOf('updated_at')] = timestamp;
-    sheet.getRange(rowIdx, 1, 1, row.length).setValues([row]);
-    return jsonResponse({ ok: true, id: body.id });
-  } else {
-    const all = sheetToObjects(sheet);
-    const projectSegments = all.filter(function(s) { return String(s.project_id) === String(projectId); });
-    for (let i = 0; i < projectSegments.length; i++) {
-      const s = projectSegments[i];
-      const sStart = Number(s.source_start_ms);
-      const sEnd = Number(s.source_end_ms);
-      if (sourceStartMs < sEnd && sourceEndMs > sStart) {
-        return errorResponse('El segmento se solapa con "' + (s.title || 'Segmento ' + s.order_index) + '"');
+  // Validate based on type
+  if (segType === 'video') {
+    const sourceStartMs = parseInt(body.source_start_ms, 10);
+    const sourceEndMs = parseInt(body.source_end_ms, 10);
+    if (isNaN(sourceStartMs) || isNaN(sourceEndMs)) return errorResponse('source_start_ms y source_end_ms deben ser numeros enteros');
+    if (sourceStartMs < 0) return errorResponse('source_start_ms no puede ser negativo');
+    if (sourceEndMs <= sourceStartMs) return errorResponse('source_end_ms debe ser mayor que source_start_ms');
+    if ((sourceEndMs - sourceStartMs) < 500) return errorResponse('Segmento muy corto (min 500ms)');
+
+    if (body.id) {
+      return updateSegmentRow(sheet, body.id, { title: title, type: segType, source_start_ms: sourceStartMs, source_end_ms: sourceEndMs, category_id: categoryId, color: color, transition_in: transitionIn, transition_out: transitionOut, payload_json: payloadJson, updated_at: timestamp });
+    } else {
+      // Check overlaps for video segments
+      const all = sheetToObjects(sheet);
+      const projectSegments = all.filter(function(s) { return String(s.project_id) === String(projectId) && String(s.type || 'video') === 'video'; });
+      for (let i = 0; i < projectSegments.length; i++) {
+        const s = projectSegments[i];
+        if (sourceStartMs < Number(s.source_end_ms) && sourceEndMs > Number(s.source_start_ms)) {
+          return errorResponse('Se solapa con "' + (s.title || 'Segmento ' + s.order_index) + '"');
+        }
       }
+      const allSegs = all.filter(function(s) { return String(s.project_id) === String(projectId); });
+      const orderIndex = allSegs.length;
+      appendRowByHeaders(sheet, { id: generateId(), project_id: projectId, order_index: orderIndex, title: title, type: segType, source_start_ms: sourceStartMs, source_end_ms: sourceEndMs, edited_start_ms: 0, edited_end_ms: 0, duration_ms: 0, category_id: categoryId, color: color, transition_in: transitionIn, transition_out: transitionOut, payload_json: payloadJson, created_at: timestamp, updated_at: timestamp });
+      return jsonResponse({ ok: true });
     }
-    const id = generateId();
-    const orderIndex = projectSegments.length;
-    appendRowByHeaders(sheet, { id: id, project_id: projectId, order_index: orderIndex, title: title, source_start_ms: sourceStartMs, source_end_ms: sourceEndMs, edited_start_ms: 0, edited_end_ms: 0, category_id: categoryId, color: color, created_at: timestamp, updated_at: timestamp });
-    return jsonResponse({ ok: true, id: id });
+  } else {
+    // Slide types: slide_text, slide_image, slide_mixed
+    const durationMs = parseInt(body.duration_ms, 10);
+    if (isNaN(durationMs) || durationMs < 1000) return errorResponse('Duracion minima de slide: 1 segundo');
+    if (durationMs > 30000) return errorResponse('Duracion maxima de slide: 30 segundos');
+
+    if (body.id) {
+      return updateSegmentRow(sheet, body.id, { title: title, type: segType, duration_ms: durationMs, source_start_ms: 0, source_end_ms: 0, category_id: categoryId, color: color, transition_in: transitionIn, transition_out: transitionOut, payload_json: payloadJson, updated_at: timestamp });
+    } else {
+      const all = sheetToObjects(sheet);
+      const allSegs = all.filter(function(s) { return String(s.project_id) === String(projectId); });
+      const orderIndex = allSegs.length;
+      appendRowByHeaders(sheet, { id: generateId(), project_id: projectId, order_index: orderIndex, title: title, type: segType, source_start_ms: 0, source_end_ms: 0, edited_start_ms: 0, edited_end_ms: 0, duration_ms: durationMs, category_id: categoryId, color: color, transition_in: transitionIn, transition_out: transitionOut, payload_json: payloadJson, created_at: timestamp, updated_at: timestamp });
+      return jsonResponse({ ok: true });
+    }
   }
+}
+
+function updateSegmentRow(sheet, segId, fields) {
+  const rowIdx = findRowIndex(sheet, 'id', segId);
+  if (rowIdx < 0) return errorResponse('Segmento no encontrado', 404);
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const row = sheet.getRange(rowIdx, 1, 1, sheet.getLastColumn()).getValues()[0];
+  for (var key in fields) {
+    var idx = headers.indexOf(key);
+    if (idx >= 0) row[idx] = fields[key];
+  }
+  sheet.getRange(rowIdx, 1, 1, row.length).setValues([row]);
+  return jsonResponse({ ok: true, id: segId });
 }
 
 function handleDeleteSegment(body) {
@@ -432,7 +456,14 @@ function handleReorderSegments(body) {
 function recalcEditedTimes(segments) {
   let cursor = 0;
   for (let i = 0; i < segments.length; i++) {
-    const duration = Number(segments[i].source_end_ms) - Number(segments[i].source_start_ms);
+    const seg = segments[i];
+    const segType = String(seg.type || 'video');
+    let duration;
+    if (segType === 'video') {
+      duration = Number(seg.source_end_ms) - Number(seg.source_start_ms);
+    } else {
+      duration = Number(seg.duration_ms) || 5000;
+    }
     segments[i].edited_start_ms = cursor;
     segments[i].edited_end_ms = cursor + duration;
     cursor += duration;
