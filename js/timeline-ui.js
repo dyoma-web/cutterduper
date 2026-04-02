@@ -412,10 +412,16 @@ CD.TimelineUI = (function() {
     CD.API.saveSegment(projectId, {
       id: seg.id,
       title: seg.title || '',
+      type: seg.type || 'video',
       source_start_ms: startMs,
       source_end_ms: endMs,
       category_id: seg.category_id || '',
-      color: seg.color || ''
+      color: seg.color || '',
+      transition_in: seg.transition_in || 'direct_cut',
+      transition_out: seg.transition_out || 'direct_cut',
+      fade_in_ms: seg.fade_in_ms || 800,
+      fade_out_ms: seg.fade_out_ms || 800,
+      payload_json: seg.payload_json || '{}'
     }).then(function() {
       return CD.API.getSegments(projectId);
     }).then(function(data) {
