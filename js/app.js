@@ -167,6 +167,24 @@ CD.App = (function() {
     CD.Comments.init('cd-comments-container');
     CD.Editor.init('cd-editor-container');
 
+    // Share button
+    var shareBtn = document.getElementById('cd-share-btn');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', function() {
+        var url = window.location.origin + window.location.pathname + '?project=' + project.id;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(function() {
+            shareBtn.innerHTML = '<span class="cd-preview-icon">&#10003;</span> Copiado!';
+            setTimeout(function() {
+              shareBtn.innerHTML = '<span class="cd-preview-icon">&#128279;</span> Compartir';
+            }, 2000);
+          });
+        } else {
+          prompt('Copia este link para compartir:', url);
+        }
+      });
+    }
+
     // Preview mode button
     initPreviewButton();
 
@@ -324,13 +342,29 @@ CD.App = (function() {
         listEl.innerHTML = '';
         for (var i = 0; i < projects.length; i++) {
           var p = projects[i];
+          var item = document.createElement('div');
+          item.className = 'cd-project-selector__item';
+
           var link = document.createElement('a');
           link.href = '?project=' + p.id;
-          link.className = 'cd-project-selector__item';
+          link.className = 'cd-project-selector__item-link';
           link.innerHTML =
             '<strong>' + escapeHtml(p.title) + '</strong>' +
             '<span>' + escapeHtml(p.youtube_video_id) + '</span>';
-          listEl.appendChild(link);
+
+          var delBtn = document.createElement('button');
+          delBtn.className = 'cd-btn cd-btn--xs cd-btn--danger';
+          delBtn.textContent = 'Eliminar';
+          delBtn.dataset.projectId = p.id;
+          delBtn.dataset.projectTitle = p.title;
+          delBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            handleDeleteProject(this.dataset.projectId, this.dataset.projectTitle);
+          });
+
+          item.appendChild(link);
+          item.appendChild(delBtn);
+          listEl.appendChild(item);
         }
       })
       .catch(function(err) {
@@ -368,6 +402,34 @@ CD.App = (function() {
           btn.textContent = 'Crear proyecto';
         });
     });
+  }
+
+  /**
+   * Eliminar proyecto con confirmacion de seguridad.
+   */
+  function handleDeleteProject(projectId, projectTitle) {
+    var confirmation = prompt('Para eliminar "' + projectTitle + '" escribe "delete" y presiona OK:');
+    if (confirmation !== 'delete') {
+      if (confirmation !== null) alert('Debes escribir exactamente "delete" para confirmar.');
+      return;
+    }
+
+    // Need PIN to authorize deletion
+    var pin = prompt('Ingresa el PIN de edicion del proyecto para confirmar:');
+    if (!pin) return;
+
+    // Unlock first, then delete
+    CD.API.unlock(projectId, pin)
+      .then(function(data) {
+        return CD.API.deleteProject(projectId, data.token);
+      })
+      .then(function() {
+        alert('Proyecto eliminado.');
+        window.location.href = '?';
+      })
+      .catch(function(err) {
+        alert('Error: ' + err.message);
+      });
   }
 
   /**

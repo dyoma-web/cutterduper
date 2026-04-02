@@ -1330,14 +1330,14 @@ textarea.cd-input {
 }
 
 .cd-project-selector__item {
-  display: block;
-  padding: 0.65rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
   background: var(--cd-bg-elevated);
   border: 1px solid var(--cd-border);
   border-radius: var(--cd-radius);
   margin-bottom: 0.4rem;
-  text-decoration: none;
-  color: var(--cd-text);
   transition: background var(--cd-transition), border-color var(--cd-transition);
 }
 
@@ -1346,15 +1346,26 @@ textarea.cd-input {
   border-color: var(--cd-primary);
 }
 
-.cd-project-selector__item strong {
+.cd-project-selector__item-link {
+  flex: 1;
+  text-decoration: none;
+  color: var(--cd-text);
+  min-width: 0;
+}
+
+.cd-project-selector__item-link strong {
   display: block;
   font-size: 0.85rem;
 }
 
-.cd-project-selector__item span {
+.cd-project-selector__item-link span {
   font-size: 0.7rem;
   color: var(--cd-text-muted);
   font-family: var(--cd-font-mono);
+}
+
+.cd-project-selector__item .cd-btn--danger {
+  flex-shrink: 0;
 }
 
 /* ============================================================

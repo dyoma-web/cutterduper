@@ -210,6 +210,7 @@ function doPost(e) {
       case 'deleteComment': return handleDeleteComment(body);
       case 'saveCategory': return handleSaveCategory(body);
       case 'deleteCategory': return handleDeleteCategory(body);
+      case 'deleteProject': return handleDeleteProject(body);
       default: return errorResponse('Accion POST no reconocida: ' + action);
     }
   } catch (err) { return errorResponse('Error interno: ' + err.message, 500); }
@@ -261,6 +262,33 @@ function handleUpdateProject(body) {
   if (body.status !== undefined && ['draft', 'published'].indexOf(body.status) >= 0) row[headers.indexOf('status')] = body.status;
   row[headers.indexOf('updated_at')] = now();
   sheet.getRange(rowIdx, 1, 1, row.length).setValues([row]);
+  return jsonResponse({ ok: true });
+}
+
+function handleDeleteProject(body) {
+  if (!requireEditor(body)) return errorResponse('No autorizado', 401);
+  const projectId = (body.projectId || '').trim();
+  if (!projectId) return errorResponse('projectId es obligatorio');
+
+  // Delete project
+  if (!deleteRow(getSheet('projects'), 'id', projectId)) return errorResponse('Proyecto no encontrado', 404);
+
+  // Delete related data
+  var sheets = ['segments', 'comments', 'categories', 'edit_sessions'];
+  for (var s = 0; s < sheets.length; s++) {
+    var sheet = getSheet(sheets[s]);
+    var data = sheet.getDataRange().getValues();
+    var headers = data[0];
+    var colIdx = headers.indexOf('project_id');
+    if (colIdx < 0) continue;
+    // Delete from bottom to top to avoid index shift
+    for (var r = data.length - 1; r >= 1; r--) {
+      if (String(data[r][colIdx]) === String(projectId)) {
+        sheet.deleteRow(r + 1);
+      }
+    }
+  }
+
   return jsonResponse({ ok: true });
 }
 

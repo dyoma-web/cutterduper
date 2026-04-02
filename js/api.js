@@ -93,6 +93,10 @@ CD.API = (function() {
     return apiPost(body);
   }
 
+  function deleteProject(projectId, editToken) {
+    return apiPost({ action: 'deleteProject', projectId: projectId, editToken: editToken });
+  }
+
   function getSegments(projectId) {
     return apiGet({ action: 'getSegments', projectId: projectId });
   }
@@ -175,6 +179,7 @@ CD.API = (function() {
     getProjects: getProjects,
     createProject: createProject,
     updateProject: updateProject,
+    deleteProject: deleteProject,
     getSegments: getSegments,
     saveSegment: saveSegment,
     deleteSegment: deleteSegment,
