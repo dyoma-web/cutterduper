@@ -266,7 +266,6 @@ function handleUpdateProject(body) {
 }
 
 function handleDeleteProject(body) {
-  if (!requireEditor(body)) return errorResponse('No autorizado', 401);
   const projectId = (body.projectId || '').trim();
   if (!projectId) return errorResponse('projectId es obligatorio');
 

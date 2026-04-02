@@ -414,15 +414,7 @@ CD.App = (function() {
       return;
     }
 
-    // Need PIN to authorize deletion
-    var pin = prompt('Ingresa el PIN de edicion del proyecto para confirmar:');
-    if (!pin) return;
-
-    // Unlock first, then delete
-    CD.API.unlock(projectId, pin)
-      .then(function(data) {
-        return CD.API.deleteProject(projectId, data.token);
-      })
+    CD.API.deleteProject(projectId, '')
       .then(function() {
         alert('Proyecto eliminado.');
         window.location.href = '?';
