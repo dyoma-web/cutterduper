@@ -187,7 +187,11 @@ CD.Editor = (function() {
       // Transitions
       '<div class="cd-form-grid" style="margin-top:0.5rem">' +
         '<label>Transicion entrada<select id="cd-seg-trans-in" class="cd-input">' + transOptions + '</select></label>' +
+        '<label>Fade entrada (seg)<input type="number" id="cd-seg-fade-in" class="cd-input" value="0.8" min="0.3" max="3" step="0.1"></label>' +
         '<label>Transicion salida<select id="cd-seg-trans-out" class="cd-input">' + transOptions + '</select></label>' +
+      '</div>' +
+      '<div class="cd-form-grid" style="margin-top:0.3rem">' +
+        '<label>Fade salida (seg)<input type="number" id="cd-seg-fade-out" class="cd-input" value="0.8" min="0.3" max="3" step="0.1"></label>' +
         '<label>Categoria<select id="cd-seg-category" class="cd-input">' + catOptions + '</select></label>' +
       '</div>' +
       '<div class="cd-form-grid cd-form-grid--2" style="margin-top:0.3rem">' +
@@ -441,6 +445,10 @@ CD.Editor = (function() {
     var color = categoryId ? '' : colorInput;
     var transIn = document.getElementById('cd-seg-trans-in').value;
     var transOut = document.getElementById('cd-seg-trans-out').value;
+    var fadeInSec = parseFloat(document.getElementById('cd-seg-fade-in').value) || 0.8;
+    var fadeOutSec = parseFloat(document.getElementById('cd-seg-fade-out').value) || 0.8;
+    var fadeInMs = Math.round(Math.max(0.3, Math.min(3, fadeInSec)) * 1000);
+    var fadeOutMs = Math.round(Math.max(0.3, Math.min(3, fadeOutSec)) * 1000);
     var errorEl = document.getElementById('cd-seg-error');
 
     var projectId = CD.State.get('project').id;
@@ -452,7 +460,9 @@ CD.Editor = (function() {
       category_id: categoryId,
       color: color,
       transition_in: transIn,
-      transition_out: transOut
+      transition_out: transOut,
+      fade_in_ms: fadeInMs,
+      fade_out_ms: fadeOutMs
     };
 
     if (segType === 'video') {
@@ -585,8 +595,12 @@ CD.Editor = (function() {
     // Transitions
     var transInEl = document.getElementById('cd-seg-trans-in');
     var transOutEl = document.getElementById('cd-seg-trans-out');
+    var fadeInEl = document.getElementById('cd-seg-fade-in');
+    var fadeOutEl = document.getElementById('cd-seg-fade-out');
     if (transInEl) transInEl.value = seg.transition_in || 'direct_cut';
     if (transOutEl) transOutEl.value = seg.transition_out || 'direct_cut';
+    if (fadeInEl) fadeInEl.value = ((Number(seg.fade_in_ms) || 800) / 1000).toFixed(1);
+    if (fadeOutEl) fadeOutEl.value = ((Number(seg.fade_out_ms) || 800) / 1000).toFixed(1);
 
     var catSelect = document.getElementById('cd-seg-category');
     if (catSelect) catSelect.value = seg.category_id || '';

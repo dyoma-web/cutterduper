@@ -188,8 +188,9 @@ CD.Player = (function() {
     // If there's a transition out, play it before moving on
     if (transOut !== 'direct_cut' && CD.Overlay && !isTransitioning) {
       isTransitioning = true;
+      var fadeOutMs = Number(currentSeg.fade_out_ms) || CD.Overlay.FADE_DEFAULT_MS;
       if (ytPlayer) ytPlayer.pauseVideo();
-      CD.Overlay.fadeOut(transOut, 400).then(function() {
+      CD.Overlay.fadeOut(transOut, fadeOutMs).then(function() {
         proceedAfterSegment(segmentIndex);
       });
       return;
@@ -240,18 +241,21 @@ CD.Player = (function() {
       seekToSource(sourceStartMs);
       CD.State.set({ currentSourceMs: sourceStartMs });
 
-      // Fade in if the segment has a transition_in
       var transIn = String(segment.transition_in || 'direct_cut');
+      var fadeInMs = Number(segment.fade_in_ms) || CD.Overlay.FADE_DEFAULT_MS;
 
       setTimeout(function() {
-        isTransitioning = false;
-        if (transIn !== 'direct_cut' && CD.Overlay) {
-          CD.Overlay.fadeIn(400);
-        } else if (CD.Overlay) {
-          CD.Overlay.hide();
-        }
+        // Start playback first, then fade in the overlay
         if (wasPlaying && ytPlayer && typeof ytPlayer.playVideo === 'function') {
           ytPlayer.playVideo();
+        }
+        isTransitioning = false;
+
+        if (transIn !== 'direct_cut' && CD.Overlay) {
+          // Fade in: overlay starts opaque, fades to transparent revealing video
+          CD.Overlay.fadeIn(transIn, fadeInMs);
+        } else if (CD.Overlay) {
+          CD.Overlay.hide();
         }
       }, 250);
 
@@ -264,10 +268,10 @@ CD.Player = (function() {
 
       if (CD.Overlay) {
         CD.Overlay.showSlide(segment).then(function() {
-          // Slide finished — move to next segment
           var transOut = String(segment.transition_out || 'direct_cut');
+          var fadeOutMs = Number(segment.fade_out_ms) || CD.Overlay.FADE_DEFAULT_MS;
           if (transOut !== 'direct_cut') {
-            CD.Overlay.fadeOut(transOut, 400).then(function() {
+            CD.Overlay.fadeOut(transOut, fadeOutMs).then(function() {
               isTransitioning = false;
               proceedAfterSegment(segmentIndex);
             });
@@ -279,7 +283,6 @@ CD.Player = (function() {
         });
       }
 
-      // Update edited time during slide with a local timer
       startSlideTimer(segment);
     }
   }

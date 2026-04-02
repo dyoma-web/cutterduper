@@ -202,8 +202,8 @@ CD.TimelineUI = (function() {
           block.appendChild(label);
         }
 
-        // Drag handles (only in edit mode)
-        if (isEditing) {
+        // Drag handles (only for the segment being edited)
+        if (isEditing && editingId && String(seg.id) === String(editingId)) {
           var handleL = document.createElement('div');
           handleL.className = 'cd-timeline__handle cd-timeline__handle--left';
           handleL.dataset.segId = seg.id;

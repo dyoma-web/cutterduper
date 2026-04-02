@@ -40,7 +40,7 @@ function getSheet(name) {
 
 const SHEET_HEADERS = {
   projects: ['id', 'title', 'description', 'youtube_video_id', 'edit_pin_hash', 'status', 'created_at', 'updated_at'],
-  segments: ['id', 'project_id', 'order_index', 'title', 'type', 'source_start_ms', 'source_end_ms', 'edited_start_ms', 'edited_end_ms', 'duration_ms', 'category_id', 'color', 'transition_in', 'transition_out', 'payload_json', 'created_at', 'updated_at'],
+  segments: ['id', 'project_id', 'order_index', 'title', 'type', 'source_start_ms', 'source_end_ms', 'edited_start_ms', 'edited_end_ms', 'duration_ms', 'category_id', 'color', 'transition_in', 'transition_out', 'fade_in_ms', 'fade_out_ms', 'payload_json', 'created_at', 'updated_at'],
   categories: ['id', 'project_id', 'name', 'color', 'created_at'],
   comments: ['id', 'project_id', 'edited_time_ms', 'source_time_ms', 'author_label', 'text', 'created_at'],
   edit_sessions: ['project_id', 'token', 'expires_at']
@@ -367,6 +367,8 @@ function handleSaveSegment(body) {
   const color = String(body.color || '');
   const transitionIn = String(body.transition_in || 'direct_cut');
   const transitionOut = String(body.transition_out || 'direct_cut');
+  const fadeInMs = parseInt(body.fade_in_ms, 10) || 800;
+  const fadeOutMs = parseInt(body.fade_out_ms, 10) || 800;
   const payloadJson = String(body.payload_json || '{}');
   const sheet = getSheet('segments');
   const timestamp = now();
@@ -381,7 +383,7 @@ function handleSaveSegment(body) {
     if ((sourceEndMs - sourceStartMs) < 500) return errorResponse('Segmento muy corto (min 500ms)');
 
     if (body.id) {
-      return updateSegmentRow(sheet, body.id, { title: title, type: segType, source_start_ms: sourceStartMs, source_end_ms: sourceEndMs, category_id: categoryId, color: color, transition_in: transitionIn, transition_out: transitionOut, payload_json: payloadJson, updated_at: timestamp });
+      return updateSegmentRow(sheet, body.id, { title: title, type: segType, source_start_ms: sourceStartMs, source_end_ms: sourceEndMs, category_id: categoryId, color: color, transition_in: transitionIn, transition_out: transitionOut, fade_in_ms: fadeInMs, fade_out_ms: fadeOutMs, payload_json: payloadJson, updated_at: timestamp });
     } else {
       // Check overlaps for video segments
       const all = sheetToObjects(sheet);
@@ -394,7 +396,7 @@ function handleSaveSegment(body) {
       }
       const allSegs = all.filter(function(s) { return String(s.project_id) === String(projectId); });
       const orderIndex = allSegs.length;
-      appendRowByHeaders(sheet, { id: generateId(), project_id: projectId, order_index: orderIndex, title: title, type: segType, source_start_ms: sourceStartMs, source_end_ms: sourceEndMs, edited_start_ms: 0, edited_end_ms: 0, duration_ms: 0, category_id: categoryId, color: color, transition_in: transitionIn, transition_out: transitionOut, payload_json: payloadJson, created_at: timestamp, updated_at: timestamp });
+      appendRowByHeaders(sheet, { id: generateId(), project_id: projectId, order_index: orderIndex, title: title, type: segType, source_start_ms: sourceStartMs, source_end_ms: sourceEndMs, edited_start_ms: 0, edited_end_ms: 0, duration_ms: 0, category_id: categoryId, color: color, transition_in: transitionIn, transition_out: transitionOut, fade_in_ms: fadeInMs, fade_out_ms: fadeOutMs, payload_json: payloadJson, created_at: timestamp, updated_at: timestamp });
       return jsonResponse({ ok: true });
     }
   } else {
@@ -404,12 +406,12 @@ function handleSaveSegment(body) {
     if (durationMs > 30000) return errorResponse('Duracion maxima de slide: 30 segundos');
 
     if (body.id) {
-      return updateSegmentRow(sheet, body.id, { title: title, type: segType, duration_ms: durationMs, source_start_ms: 0, source_end_ms: 0, category_id: categoryId, color: color, transition_in: transitionIn, transition_out: transitionOut, payload_json: payloadJson, updated_at: timestamp });
+      return updateSegmentRow(sheet, body.id, { title: title, type: segType, duration_ms: durationMs, source_start_ms: 0, source_end_ms: 0, category_id: categoryId, color: color, transition_in: transitionIn, transition_out: transitionOut, fade_in_ms: fadeInMs, fade_out_ms: fadeOutMs, payload_json: payloadJson, updated_at: timestamp });
     } else {
       const all = sheetToObjects(sheet);
       const allSegs = all.filter(function(s) { return String(s.project_id) === String(projectId); });
       const orderIndex = allSegs.length;
-      appendRowByHeaders(sheet, { id: generateId(), project_id: projectId, order_index: orderIndex, title: title, type: segType, source_start_ms: 0, source_end_ms: 0, edited_start_ms: 0, edited_end_ms: 0, duration_ms: durationMs, category_id: categoryId, color: color, transition_in: transitionIn, transition_out: transitionOut, payload_json: payloadJson, created_at: timestamp, updated_at: timestamp });
+      appendRowByHeaders(sheet, { id: generateId(), project_id: projectId, order_index: orderIndex, title: title, type: segType, source_start_ms: 0, source_end_ms: 0, edited_start_ms: 0, edited_end_ms: 0, duration_ms: durationMs, category_id: categoryId, color: color, transition_in: transitionIn, transition_out: transitionOut, fade_in_ms: fadeInMs, fade_out_ms: fadeOutMs, payload_json: payloadJson, created_at: timestamp, updated_at: timestamp });
       return jsonResponse({ ok: true });
     }
   }
