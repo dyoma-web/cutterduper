@@ -507,6 +507,8 @@ CD.Editor = (function() {
 
     if (editingSegmentId) data.id = editingSegmentId;
 
+    console.log('[CutterDuper DEBUG] Saving segment with data:', JSON.stringify(data, null, 2));
+
     saveBtn.disabled = true;
     CD.API.saveSegment(projectId, data)
       .then(function() { resetForm(); CD.TimelineUI.removePreview(); return reloadSegments(); })
@@ -602,6 +604,15 @@ CD.Editor = (function() {
     if (fadeInEl) fadeInEl.value = ((Number(seg.fade_in_ms) || 800) / 1000).toFixed(1);
     if (fadeOutEl) fadeOutEl.value = ((Number(seg.fade_out_ms) || 800) / 1000).toFixed(1);
 
+    console.log('[CutterDuper DEBUG] Loading segment for edit:', {
+      id: seg.id,
+      transition_in: seg.transition_in,
+      transition_out: seg.transition_out,
+      fade_in_ms: seg.fade_in_ms,
+      fade_out_ms: seg.fade_out_ms,
+      type: seg.type
+    });
+
     var catSelect = document.getElementById('cd-seg-category');
     if (catSelect) catSelect.value = seg.category_id || '';
 
@@ -636,6 +647,9 @@ CD.Editor = (function() {
 
   function reloadSegments() {
     return CD.API.getSegments(CD.State.get('project').id).then(function(data) {
+      console.log('[CutterDuper DEBUG] Segments from backend:', JSON.stringify(data.segments.map(function(s) {
+        return { id: s.id, title: s.title, fade_in_ms: s.fade_in_ms, fade_out_ms: s.fade_out_ms, transition_in: s.transition_in, transition_out: s.transition_out };
+      }), null, 2));
       CD.State.set({ segments: CD.Utils.buildEditedTimeline(data.segments) });
     });
   }
